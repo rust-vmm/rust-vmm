@@ -243,28 +243,197 @@ mod tests {
     use crate::{Bytes, GuestMemoryBackend, GuestMemoryError};
 
     use std::io::Write;
+    use std::sync::Arc;
     #[cfg(feature = "rawfd")]
     use std::{fs::File, path::Path};
     use vmm_sys_util::tempfile::TempFile;
 
     use matches::assert_matches;
 
-    type GuestRegionMmap = super::GuestRegionMmap<()>;
-    type GuestMemoryMmap = super::GuestRegionCollection<GuestRegionMmap>;
-    type MmapRegion = super::MmapRegion<()>;
+    macro_rules! any_backend {
+        ($($(#[$attr:meta])* $backend: ident[$region: path]), *) => {
+            #[derive(Debug)]
+            enum AnyRegion {
+                $(
+                    $(#[$attr])* $backend($region)
+                ),*
+            }
+
+            type AnyBackend = $crate::GuestRegionCollection<AnyRegion>;
+
+            impl $crate::GuestMemoryRegion for AnyRegion {
+                type B = ();
+
+                fn len(&self) -> GuestUsize {
+                    match self {
+                        $($(#[$attr])* AnyRegion::$backend(inner) => $crate::GuestMemoryRegion::len(inner)),*
+                    }
+                }
+
+                fn start_addr(&self) -> GuestAddress {
+                    match self {
+                        $($(#[$attr])* AnyRegion::$backend(inner) => inner.start_addr()),*
+                    }
+                }
+
+                fn bitmap(&self) { }
+
+                fn get_host_address(&self, addr: MemoryRegionAddress) -> guest_memory::Result<*mut u8> {
+                    match self {
+                        $($(#[$attr])* AnyRegion::$backend(inner) => inner.get_host_address(addr)),*
+                    }
+                }
+
+                fn file_offset(&self) -> Option<&FileOffset> {
+                    match self {
+                        $($(#[$attr])* AnyRegion::$backend(inner) => inner.file_offset()),*
+                    }
+                }
+
+                fn get_slice(&self, offset: MemoryRegionAddress, count: usize) -> guest_memory::Result<VolatileSlice<'_, BS<'_, Self::B>>> {
+                    match self {
+                        $($(#[$attr])* AnyRegion::$backend(inner) => $crate::GuestMemoryRegion::get_slice(inner, offset, count)),*
+                    }
+                }
+            }
+
+            impl GuestMemoryRegionBytes for AnyRegion {}
+        };
+    }
+
+    any_backend! {
+        #[cfg(all(windows, feature = "backend-mmap"))]
+        Windows[GuestRegionMmap<()>],
+        #[cfg(all(unix, feature = "backend-mmap", not(feature = "xen")))]
+        Mmap[GuestRegionMmap<()>],
+        #[cfg(all(unix, feature = "backend-mmap", feature = "xen"))]
+        Xen[crate::mmap::xen::MmapRegion]
+    }
+
+    // The cfgs make using vec![...] instead more unreadable, so suppress the lint here.
+    #[allow(clippy::vec_init_then_push)]
+    impl AnyRegion {
+        fn all_with_file(addr: GuestAddress, size: usize, f_off: &FileOffset) -> Vec<AnyRegion> {
+            let mut regions = Vec::new();
+            #[cfg(all(windows, feature = "backend-mmap"))]
+            regions.push(AnyRegion::Windows(
+                GuestRegionMmap::new(MmapRegion::from_file(f_off.clone(), size).unwrap(), addr)
+                    .unwrap(),
+            ));
+            #[cfg(all(unix, feature = "backend-mmap", not(feature = "xen")))]
+            regions.push(AnyRegion::Mmap(
+                GuestRegionMmap::new(MmapRegion::from_file(f_off.clone(), size).unwrap(), addr)
+                    .unwrap(),
+            ));
+            #[cfg(all(unix, feature = "backend-mmap", feature = "xen"))]
+            regions.push(AnyRegion::Xen(
+                MmapRegion::from_range(MmapRange::new_unix(size, Some(f_off.clone()), addr))
+                    .unwrap(),
+            ));
+            regions
+        }
+
+        fn change_addr(region: Arc<AnyRegion>, addr: GuestAddress) -> AnyRegion {
+            match region.as_ref() {
+                #[cfg(all(windows, feature = "backend-mmap"))]
+                AnyRegion::Windows(region) => {
+                    AnyRegion::Windows(GuestRegionMmap::with_arc(region.get_mmap(), addr).unwrap())
+                }
+
+                #[cfg(all(unix, feature = "backend-mmap", not(feature = "xen")))]
+                AnyRegion::Mmap(region) => {
+                    AnyRegion::Mmap(GuestRegionMmap::with_arc(region.get_mmap(), addr).unwrap())
+                }
+
+                #[cfg(all(unix, feature = "backend-mmap", feature = "xen"))]
+                AnyRegion::Xen(region) => AnyRegion::Xen(
+                    MmapRegion::from_range(MmapRange::new_unix(
+                        crate::GuestMemoryRegion::len(region) as usize,
+                        None,
+                        addr,
+                    ))
+                    .unwrap(),
+                ),
+            }
+        }
+
+        fn all(addr: GuestAddress, size: usize, file: &Option<FileOffset>) -> Vec<AnyRegion> {
+            let mut regions = if let Some(file) = file {
+                Self::all_with_file(addr, size, file)
+            } else {
+                Vec::new()
+            };
+            #[cfg(all(windows, feature = "backend-mmap"))]
+            regions.push(AnyRegion::Windows(
+                GuestRegionMmap::new(MmapRegion::new(size).unwrap(), addr).unwrap(),
+            ));
+            #[cfg(all(unix, feature = "backend-mmap", not(feature = "xen")))]
+            regions.push(AnyRegion::Mmap(
+                GuestRegionMmap::new(MmapRegion::new(size).unwrap(), addr).unwrap(),
+            ));
+            #[cfg(all(unix, feature = "backend-mmap", feature = "xen"))]
+            regions.push(AnyRegion::Xen(
+                MmapRegion::from_range(MmapRange::new_unix(size, None, addr)).unwrap(),
+            ));
+            regions
+        }
+
+        fn as_ptr(&self) -> *mut u8 {
+            self.get_host_address(MemoryRegionAddress(0)).unwrap()
+        }
+    }
+
+    fn transpose(striped: Vec<Vec<AnyRegion>>) -> Vec<AnyBackend> {
+        assert!(!striped.is_empty(), "No test cases found!");
+
+        let mut backends = (0..striped[0].len())
+            .map(|_| AnyBackend::default())
+            .collect::<Vec<_>>();
+        for stripe in striped {
+            backends
+                .iter_mut()
+                .zip(stripe)
+                .for_each(|(backend, region)| {
+                    *backend = backend.insert_region(Arc::new(region)).unwrap();
+                });
+        }
+        backends
+    }
+
+    impl AnyBackend {
+        fn all_with_file(regions: &[(GuestAddress, usize, FileOffset)]) -> Vec<AnyBackend> {
+            let striped = regions
+                .iter()
+                .map(|(addr, size, file)| AnyRegion::all_with_file(*addr, *size, file))
+                .collect::<Vec<_>>();
+
+            transpose(striped)
+        }
+
+        fn all(regions: &[(GuestAddress, usize, Option<FileOffset>)]) -> Vec<AnyBackend> {
+            let striped = regions
+                .iter()
+                .map(|(addr, size, file)| AnyRegion::all(*addr, *size, file))
+                .collect::<Vec<_>>();
+
+            transpose(striped)
+        }
+    }
 
     #[test]
     fn basic_map() {
-        let m = MmapRegion::new(1024).unwrap();
-        assert_eq!(1024, m.size());
+        for m in AnyRegion::all(GuestAddress(0), 1024, &None) {
+            assert_eq!(1024, m.len());
+        }
     }
 
     #[test]
     fn slice_addr() {
-        let m = GuestRegionMmap::from_range(GuestAddress(0), 5, None).unwrap();
-        let s = m.get_slice(MemoryRegionAddress(2), 3).unwrap();
-        let guard = s.ptr_guard();
-        assert_eq!(guard.as_ptr(), unsafe { m.as_ptr().offset(2) });
+        for m in AnyRegion::all(GuestAddress(0), 5, &None) {
+            let s = m.get_slice(MemoryRegionAddress(2), 3).unwrap();
+            let guard = s.ptr_guard();
+            assert_eq!(guard.as_ptr(), unsafe { m.as_ptr().offset(2) });
+        }
     }
 
     #[test]
@@ -274,14 +443,15 @@ mod tests {
         let sample_buf = &[1, 2, 3, 4, 5];
         f.write_all(sample_buf).unwrap();
 
-        let file = Some(FileOffset::new(f, 0));
-        let mem_map = GuestRegionMmap::from_range(GuestAddress(0), sample_buf.len(), file).unwrap();
-        let buf = &mut [0u8; 16];
-        assert_eq!(
-            mem_map.as_volatile_slice().unwrap().read(buf, 0).unwrap(),
-            sample_buf.len()
-        );
-        assert_eq!(buf[0..sample_buf.len()], sample_buf[..]);
+        let file = FileOffset::new(f, 0);
+        for mem_map in AnyRegion::all_with_file(GuestAddress(0), sample_buf.len(), &file) {
+            let buf = &mut [0u8; 16];
+            assert_eq!(
+                mem_map.as_volatile_slice().unwrap().read(buf, 0).unwrap(),
+                sample_buf.len()
+            );
+            assert_eq!(buf[0..sample_buf.len()], sample_buf[..]);
+        }
     }
 
     #[test]
@@ -293,20 +463,14 @@ mod tests {
 
         let start_addr1 = GuestAddress(0x0);
         let start_addr2 = GuestAddress(0x800);
-        let guest_mem =
-            GuestMemoryMmap::from_ranges(&[(start_addr1, 0x400), (start_addr2, 0x400)]).unwrap();
-        let guest_mem_backed_by_file = GuestMemoryMmap::from_ranges_with_files(&[
+        for guest_mem in AnyBackend::all(&[
             (start_addr1, 0x400, Some(FileOffset::new(f1, 0))),
             (start_addr2, 0x400, Some(FileOffset::new(f2, 0))),
-        ])
-        .unwrap();
-
-        let guest_mem_list = [guest_mem, guest_mem_backed_by_file];
-        for guest_mem in guest_mem_list.iter() {
+        ]) {
             assert!(guest_mem.to_region_addr(GuestAddress(0x600)).is_none());
             let (r0, addr0) = guest_mem.to_region_addr(GuestAddress(0x800)).unwrap();
             let (r1, addr1) = guest_mem.to_region_addr(GuestAddress(0xa00)).unwrap();
-            assert!(r0.as_ptr() == r1.as_ptr());
+            assert_eq!(r0.as_ptr(), r1.as_ptr());
             assert_eq!(addr0, MemoryRegionAddress(0));
             assert_eq!(addr1, MemoryRegionAddress(0x200));
         }
@@ -321,16 +485,10 @@ mod tests {
 
         let start_addr1 = GuestAddress(0x0);
         let start_addr2 = GuestAddress(0x800);
-        let guest_mem =
-            GuestMemoryMmap::from_ranges(&[(start_addr1, 0x400), (start_addr2, 0x400)]).unwrap();
-        let guest_mem_backed_by_file = GuestMemoryMmap::from_ranges_with_files(&[
+        for guest_mem in AnyBackend::all(&[
             (start_addr1, 0x400, Some(FileOffset::new(f1, 0))),
             (start_addr2, 0x400, Some(FileOffset::new(f2, 0))),
-        ])
-        .unwrap();
-
-        let guest_mem_list = [guest_mem, guest_mem_backed_by_file];
-        for guest_mem in guest_mem_list.iter() {
+        ]) {
             assert_matches!(
                 guest_mem.get_host_address(GuestAddress(0x600)).unwrap_err(),
                 GuestMemoryError::InvalidGuestAddress(GuestAddress(0x600))
@@ -350,22 +508,21 @@ mod tests {
         let start_addr1 = GuestAddress(0);
         let start_addr2 = GuestAddress(0x800);
         let start_addr3 = GuestAddress(0xc00);
-        let guest_mem = GuestMemoryMmap::from_ranges(&[
-            (start_addr1, 0x400),
-            (start_addr2, 0x400),
-            (start_addr3, 0x400),
-        ])
-        .unwrap();
-
-        assert!(guest_mem.check_range(start_addr1, 0x0));
-        assert!(guest_mem.check_range(start_addr1, 0x200));
-        assert!(guest_mem.check_range(start_addr1, 0x400));
-        assert!(!guest_mem.check_range(start_addr1, 0xa00));
-        assert!(guest_mem.check_range(start_addr2, 0x7ff));
-        assert!(guest_mem.check_range(start_addr2, 0x800));
-        assert!(!guest_mem.check_range(start_addr2, 0x801));
-        assert!(!guest_mem.check_range(start_addr2, 0xc00));
-        assert!(!guest_mem.check_range(start_addr1, usize::MAX));
+        for guest_mem in AnyBackend::all(&[
+            (start_addr1, 0x400, None),
+            (start_addr2, 0x400, None),
+            (start_addr3, 0x400, None),
+        ]) {
+            assert!(guest_mem.check_range(start_addr1, 0x0));
+            assert!(guest_mem.check_range(start_addr1, 0x200));
+            assert!(guest_mem.check_range(start_addr1, 0x400));
+            assert!(!guest_mem.check_range(start_addr1, 0xa00));
+            assert!(guest_mem.check_range(start_addr2, 0x7ff));
+            assert!(guest_mem.check_range(start_addr2, 0x800));
+            assert!(!guest_mem.check_range(start_addr2, 0x801));
+            assert!(!guest_mem.check_range(start_addr2, 0xc00));
+            assert!(!guest_mem.check_range(start_addr1, usize::MAX));
+        }
     }
 
     #[test]
@@ -374,16 +531,7 @@ mod tests {
         f.set_len(0x400).unwrap();
 
         let start_addr = GuestAddress(0x0);
-        let guest_mem = GuestMemoryMmap::from_ranges(&[(start_addr, 0x400)]).unwrap();
-        let guest_mem_backed_by_file = GuestMemoryMmap::from_ranges_with_files(&[(
-            start_addr,
-            0x400,
-            Some(FileOffset::new(f, 0)),
-        )])
-        .unwrap();
-
-        let guest_mem_list = [guest_mem, guest_mem_backed_by_file];
-        for guest_mem in guest_mem_list.iter() {
+        for guest_mem in AnyBackend::all(&[(start_addr, 0x400, Some(FileOffset::new(f, 0)))]) {
             let sample_buf = &[1, 2, 3, 4, 5];
 
             assert_eq!(guest_mem.write(sample_buf, start_addr).unwrap(), 5);
@@ -412,16 +560,10 @@ mod tests {
         let bad_addr2 = GuestAddress(0x1ffc);
         let max_addr = GuestAddress(0x2000);
 
-        let gm =
-            GuestMemoryMmap::from_ranges(&[(start_addr1, 0x1000), (start_addr2, 0x1000)]).unwrap();
-        let gm_backed_by_file = GuestMemoryMmap::from_ranges_with_files(&[
+        for gm in AnyBackend::all(&[
             (start_addr1, 0x1000, Some(FileOffset::new(f1, 0))),
             (start_addr2, 0x1000, Some(FileOffset::new(f2, 0))),
-        ])
-        .unwrap();
-
-        let gm_list = [gm, gm_backed_by_file];
-        for gm in gm_list.iter() {
+        ]) {
             let val1: u64 = 0xaa55_aa55_aa55_aa55;
             let val2: u64 = 0x55aa_55aa_55aa_55aa;
             assert_matches!(
@@ -447,16 +589,7 @@ mod tests {
         f.set_len(0x400).unwrap();
 
         let mut start_addr = GuestAddress(0x1000);
-        let gm = GuestMemoryMmap::from_ranges(&[(start_addr, 0x400)]).unwrap();
-        let gm_backed_by_file = GuestMemoryMmap::from_ranges_with_files(&[(
-            start_addr,
-            0x400,
-            Some(FileOffset::new(f, 0)),
-        )])
-        .unwrap();
-
-        let gm_list = [gm, gm_backed_by_file];
-        for gm in gm_list.iter() {
+        for gm in AnyBackend::all(&[(start_addr, 0x400, Some(FileOffset::new(f, 0)))]) {
             let sample_buf = &[1, 2, 3, 4, 5];
 
             assert_eq!(gm.write(sample_buf, start_addr).unwrap(), 5);
@@ -482,22 +615,9 @@ mod tests {
         let f = TempFile::new().unwrap().into_file();
         f.set_len(0x400).unwrap();
 
-        let gm = GuestMemoryMmap::from_ranges(&[(GuestAddress(0x1000), 0x400)]).unwrap();
-        let gm_backed_by_file = GuestMemoryMmap::from_ranges_with_files(&[(
-            GuestAddress(0x1000),
-            0x400,
-            Some(FileOffset::new(f, 0)),
-        )])
-        .unwrap();
-
-        let gm_list = [gm, gm_backed_by_file];
-        for gm in gm_list.iter() {
+        for gm in AnyBackend::all(&[(GuestAddress(0x1000), 0x400, Some(FileOffset::new(f, 0)))]) {
             let addr = GuestAddress(0x1010);
-            let mut file = if cfg!(target_family = "unix") {
-                File::open(Path::new("/dev/zero")).unwrap()
-            } else {
-                File::open(Path::new("c:\\Windows\\system32\\ntoskrnl.exe")).unwrap()
-            };
+            let mut file = File::open(Path::new("/dev/zero")).unwrap();
             gm.write_obj(!0u32, addr).unwrap();
             gm.read_exact_volatile_from(addr, &mut file, mem::size_of::<u32>())
                 .unwrap();
@@ -511,11 +631,7 @@ mod tests {
             let mut sink = vec![0; mem::size_of::<u32>()];
             gm.write_all_volatile_to(addr, &mut sink.as_mut_slice(), mem::size_of::<u32>())
                 .unwrap();
-            if cfg!(target_family = "unix") {
-                assert_eq!(sink, vec![0; mem::size_of::<u32>()]);
-            } else {
-                assert_eq!(sink, vec![0x4d, 0x5a, 0x90, 0x00]);
-            };
+            assert_eq!(sink, vec![0; mem::size_of::<u32>()]);
         }
     }
 
@@ -528,16 +644,10 @@ mod tests {
 
         let start_addr1 = GuestAddress(0x0);
         let start_addr2 = GuestAddress(0x1000);
-        let gm =
-            GuestMemoryMmap::from_ranges(&[(start_addr1, 0x1000), (start_addr2, 0x1000)]).unwrap();
-        let gm_backed_by_file = GuestMemoryMmap::from_ranges_with_files(&[
+        for gm in AnyBackend::all(&[
             (start_addr1, 0x1000, Some(FileOffset::new(f1, 0))),
             (start_addr2, 0x1000, Some(FileOffset::new(f2, 0))),
-        ])
-        .unwrap();
-
-        let gm_list = [gm, gm_backed_by_file];
-        for gm in gm_list.iter() {
+        ]) {
             let sample_buf = &[1, 2, 3, 4, 5];
             assert_eq!(gm.write(sample_buf, GuestAddress(0xffc)).unwrap(), 5);
             let buf = &mut [0u8; 5];
@@ -552,20 +662,11 @@ mod tests {
         f.set_len(0x400).unwrap();
 
         let start_addr = GuestAddress(0x0);
-        let gm = GuestMemoryMmap::from_ranges(&[(start_addr, 0x400)]).unwrap();
-        assert!(gm.find_region(start_addr).is_some());
-        let region = gm.find_region(start_addr).unwrap();
-        assert!(region.file_offset().is_none());
-
-        let gm = GuestMemoryMmap::from_ranges_with_files(&[(
-            start_addr,
-            0x400,
-            Some(FileOffset::new(f, 0)),
-        )])
-        .unwrap();
-        assert!(gm.find_region(start_addr).is_some());
-        let region = gm.find_region(start_addr).unwrap();
-        assert!(region.file_offset().is_some());
+        for gm in AnyBackend::all_with_file(&[(start_addr, 0x400, FileOffset::new(f, 0))]) {
+            assert!(gm.find_region(start_addr).is_some());
+            let region = gm.find_region(start_addr).unwrap();
+            assert!(region.file_offset().is_some());
+        }
     }
 
     // Windows needs a dedicated test where it will retrieve the allocation
@@ -581,103 +682,96 @@ mod tests {
         let offset = 0x1000;
 
         let start_addr = GuestAddress(0x0);
-        let gm = GuestMemoryMmap::from_ranges(&[(start_addr, 0x400)]).unwrap();
-        assert!(gm.find_region(start_addr).is_some());
-        let region = gm.find_region(start_addr).unwrap();
-        assert!(region.file_offset().is_none());
 
-        let gm = GuestMemoryMmap::from_ranges_with_files(&[(
-            start_addr,
-            0x400,
-            Some(FileOffset::new(f, offset)),
-        )])
-        .unwrap();
-        assert!(gm.find_region(start_addr).is_some());
-        let region = gm.find_region(start_addr).unwrap();
-        assert!(region.file_offset().is_some());
-        assert_eq!(region.file_offset().unwrap().start(), offset);
+        for gm in AnyBackend::all_with_file(&[(start_addr, 0x400, FileOffset::new(f, offset))]) {
+            assert!(gm.find_region(start_addr).is_some());
+            let region = gm.find_region(start_addr).unwrap();
+            assert!(region.file_offset().is_some());
+            assert_eq!(region.file_offset().unwrap().start(), offset);
+        }
     }
 
     #[test]
     fn test_guest_memory_mmap_get_slice() {
-        let region = GuestRegionMmap::from_range(GuestAddress(0), 0x400, None).unwrap();
+        for region in AnyRegion::all(GuestAddress(0), 0x400, &None) {
+            // Normal case.
+            let slice_addr = MemoryRegionAddress(0x100);
+            let slice_size = 0x200;
+            let slice = region.get_slice(slice_addr, slice_size).unwrap();
+            assert_eq!(slice.len(), slice_size);
 
-        // Normal case.
-        let slice_addr = MemoryRegionAddress(0x100);
-        let slice_size = 0x200;
-        let slice = region.get_slice(slice_addr, slice_size).unwrap();
-        assert_eq!(slice.len(), slice_size);
+            // Empty slice.
+            let slice_addr = MemoryRegionAddress(0x200);
+            let slice_size = 0x0;
+            let slice = region.get_slice(slice_addr, slice_size).unwrap();
+            assert!(slice.is_empty());
 
-        // Empty slice.
-        let slice_addr = MemoryRegionAddress(0x200);
-        let slice_size = 0x0;
-        let slice = region.get_slice(slice_addr, slice_size).unwrap();
-        assert!(slice.is_empty());
-
-        // Error case when slice_size is beyond the boundary.
-        let slice_addr = MemoryRegionAddress(0x300);
-        let slice_size = 0x200;
-        assert_matches!(
-            region.get_slice(slice_addr, slice_size).unwrap_err(),
-            GuestMemoryError::InvalidBackendAddress
-        );
+            // Error case when slice_size is beyond the boundary.
+            let slice_addr = MemoryRegionAddress(0x300);
+            let slice_size = 0x200;
+            assert_matches!(
+                region.get_slice(slice_addr, slice_size).unwrap_err(),
+                GuestMemoryError::InvalidBackendAddress
+            );
+        }
     }
 
     #[test]
     fn test_guest_memory_mmap_as_volatile_slice() {
         let region_size = 0x400;
-        let region = GuestRegionMmap::from_range(GuestAddress(0), region_size, None).unwrap();
 
-        // Test slice length.
-        let slice = region.as_volatile_slice().unwrap();
-        assert_eq!(slice.len(), region_size);
+        for region in AnyRegion::all(GuestAddress(0), region_size, &None) {
+            // Test slice length.
+            let slice = region.as_volatile_slice().unwrap();
+            assert_eq!(slice.len(), region_size);
 
-        // Test slice data.
-        let v = 0x1234_5678u32;
-        let r = slice.get_ref::<u32>(0x200).unwrap();
-        r.store(v);
-        assert_eq!(r.load(), v);
+            // Test slice data.
+            let v = 0x1234_5678u32;
+            let r = slice.get_ref::<u32>(0x200).unwrap();
+            r.store(v);
+            assert_eq!(r.load(), v);
+        }
     }
 
     #[test]
     fn test_guest_memory_get_slice() {
         let start_addr1 = GuestAddress(0);
         let start_addr2 = GuestAddress(0x800);
-        let guest_mem =
-            GuestMemoryMmap::from_ranges(&[(start_addr1, 0x400), (start_addr2, 0x400)]).unwrap();
+        for guest_mem in AnyBackend::all(&[(start_addr1, 0x400, None), (start_addr2, 0x400, None)])
+        {
+            // Normal cases.
+            let slice_size = 0x200;
+            let slice = guest_mem
+                .get_slice(GuestAddress(0x100), slice_size)
+                .unwrap();
+            assert_eq!(slice.len(), slice_size);
 
-        // Normal cases.
-        let slice_size = 0x200;
-        let slice = guest_mem
-            .get_slice(GuestAddress(0x100), slice_size)
-            .unwrap();
-        assert_eq!(slice.len(), slice_size);
+            let slice_size = 0x400;
+            let slice = guest_mem
+                .get_slice(GuestAddress(0x800), slice_size)
+                .unwrap();
+            assert_eq!(slice.len(), slice_size);
 
-        let slice_size = 0x400;
-        let slice = guest_mem
-            .get_slice(GuestAddress(0x800), slice_size)
-            .unwrap();
-        assert_eq!(slice.len(), slice_size);
+            // Empty slice.
+            assert!(guest_mem
+                .get_slice(GuestAddress(0x900), 0)
+                .unwrap()
+                .is_empty());
 
-        // Empty slice.
-        assert!(guest_mem
-            .get_slice(GuestAddress(0x900), 0)
-            .unwrap()
-            .is_empty());
-
-        // Error cases, wrong size or base address.
-        assert_matches!(
-            guest_mem.get_slice(GuestAddress(0), 0x500).unwrap_err(),
-            GuestMemoryError::InvalidBackendAddress
-        );
-        assert_matches!(
-            guest_mem.get_slice(GuestAddress(0x600), 0x100).unwrap_err(),
-            GuestMemoryError::InvalidGuestAddress(GuestAddress(0x600))
-        );
-        assert_matches!(
-            guest_mem.get_slice(GuestAddress(0xc00), 0x100).unwrap_err(),
-            GuestMemoryError::InvalidGuestAddress(GuestAddress(0xc00))
-        );
+            // Error cases, wrong size or base address.
+            assert_matches!(
+                guest_mem.get_slice(GuestAddress(0), 0x500).unwrap_err(),
+                GuestMemoryError::InvalidBackendAddress
+            );
+            assert_matches!(
+                guest_mem.get_slice(GuestAddress(0x600), 0x100).unwrap_err(),
+                GuestMemoryError::InvalidGuestAddress(GuestAddress(0x600))
+            );
+            assert_matches!(
+                guest_mem.get_slice(GuestAddress(0xc00), 0x100).unwrap_err(),
+                GuestMemoryError::InvalidGuestAddress(GuestAddress(0xc00))
+            );
+        }
     }
 
     #[test]
@@ -685,69 +779,68 @@ mod tests {
         let start_addr1 = GuestAddress(0);
         let start_addr2 = GuestAddress(0x800);
         let start_addr3 = GuestAddress(0xc00);
-        let guest_mem = GuestMemoryMmap::from_ranges(&[
-            (start_addr1, 0x400),
-            (start_addr2, 0x400),
-            (start_addr3, 0x400),
-        ])
-        .unwrap();
+        for guest_mem in AnyBackend::all(&[
+            (start_addr1, 0x400, None),
+            (start_addr2, 0x400, None),
+            (start_addr3, 0x400, None),
+        ]) {
+            // Same cases as `test_guest_memory_get_slice()`, just with `get_slices()`.
+            let slice_size = 0x200;
+            let mut slices = guest_mem.get_slices(GuestAddress(0x100), slice_size);
+            let slice = slices.next().unwrap().unwrap();
+            assert!(slices.next().is_none());
+            assert_eq!(slice.len(), slice_size);
 
-        // Same cases as `test_guest_memory_get_slice()`, just with `get_slices()`.
-        let slice_size = 0x200;
-        let mut slices = guest_mem.get_slices(GuestAddress(0x100), slice_size);
-        let slice = slices.next().unwrap().unwrap();
-        assert!(slices.next().is_none());
-        assert_eq!(slice.len(), slice_size);
+            let slice_size = 0x400;
+            let mut slices = guest_mem.get_slices(GuestAddress(0x800), slice_size);
+            let slice = slices.next().unwrap().unwrap();
+            assert!(slices.next().is_none());
+            assert_eq!(slice.len(), slice_size);
 
-        let slice_size = 0x400;
-        let mut slices = guest_mem.get_slices(GuestAddress(0x800), slice_size);
-        let slice = slices.next().unwrap().unwrap();
-        assert!(slices.next().is_none());
-        assert_eq!(slice.len(), slice_size);
+            // Empty iterator.
+            assert!(guest_mem
+                .get_slices(GuestAddress(0x900), 0)
+                .next()
+                .is_none());
 
-        // Empty iterator.
-        assert!(guest_mem
-            .get_slices(GuestAddress(0x900), 0)
-            .next()
-            .is_none());
+            // Error cases, wrong size or base address.
+            let mut slices = guest_mem.get_slices(GuestAddress(0), 0x500);
+            assert_eq!(slices.next().unwrap().unwrap().len(), 0x400);
+            assert_matches!(
+                slices.next().unwrap().unwrap_err(),
+                GuestMemoryError::InvalidGuestAddress(GuestAddress(0x400))
+            );
+            assert!(slices.next().is_none());
+            let mut slices = guest_mem.get_slices(GuestAddress(0x600), 0x100);
+            assert_matches!(
+                slices.next().unwrap().unwrap_err(),
+                GuestMemoryError::InvalidGuestAddress(GuestAddress(0x600))
+            );
+            assert!(slices.next().is_none());
+            let mut slices = guest_mem.get_slices(GuestAddress(0x1000), 0x100);
+            assert_matches!(
+                slices.next().unwrap().unwrap_err(),
+                GuestMemoryError::InvalidGuestAddress(GuestAddress(0x1000))
+            );
+            assert!(slices.next().is_none());
 
-        // Error cases, wrong size or base address.
-        let mut slices = guest_mem.get_slices(GuestAddress(0), 0x500);
-        assert_eq!(slices.next().unwrap().unwrap().len(), 0x400);
-        assert_matches!(
-            slices.next().unwrap().unwrap_err(),
-            GuestMemoryError::InvalidGuestAddress(GuestAddress(0x400))
-        );
-        assert!(slices.next().is_none());
-        let mut slices = guest_mem.get_slices(GuestAddress(0x600), 0x100);
-        assert_matches!(
-            slices.next().unwrap().unwrap_err(),
-            GuestMemoryError::InvalidGuestAddress(GuestAddress(0x600))
-        );
-        assert!(slices.next().is_none());
-        let mut slices = guest_mem.get_slices(GuestAddress(0x1000), 0x100);
-        assert_matches!(
-            slices.next().unwrap().unwrap_err(),
-            GuestMemoryError::InvalidGuestAddress(GuestAddress(0x1000))
-        );
-        assert!(slices.next().is_none());
-
-        // Test fragmented case
-        let mut slices = guest_mem.get_slices(GuestAddress(0xa00), 0x400);
-        assert_eq!(slices.next().unwrap().unwrap().len(), 0x200);
-        assert_eq!(slices.next().unwrap().unwrap().len(), 0x200);
-        assert!(slices.next().is_none());
+            // Test fragmented case
+            let mut slices = guest_mem.get_slices(GuestAddress(0xa00), 0x400);
+            assert_eq!(slices.next().unwrap().unwrap().len(), 0x200);
+            assert_eq!(slices.next().unwrap().unwrap().len(), 0x200);
+            assert!(slices.next().is_none());
+        }
     }
 
     #[test]
     fn test_atomic_accesses() {
-        let region = GuestRegionMmap::from_range(GuestAddress(0), 0x1000, None).unwrap();
-
-        crate::bytes::tests::check_atomic_accesses(
-            region,
-            MemoryRegionAddress(0),
-            MemoryRegionAddress(0x1000),
-        );
+        for region in AnyRegion::all(GuestAddress(0), 0x1000, &None) {
+            crate::bytes::tests::check_atomic_accesses(
+                region,
+                MemoryRegionAddress(0),
+                MemoryRegionAddress(0x1000),
+            );
+        }
     }
 
     #[test]
@@ -763,24 +856,26 @@ mod tests {
     fn test_change_region_addr() {
         let addr1 = GuestAddress(0x1000);
         let addr2 = GuestAddress(0x2000);
-        let gm = GuestMemoryMmap::from_ranges(&[(addr1, 0x1000)]).unwrap();
 
-        assert!(gm.find_region(addr1).is_some());
-        assert!(gm.find_region(addr2).is_none());
+        for gm in AnyBackend::all(&[(addr1, 0x1000, None)]) {
+            assert!(gm.find_region(addr1).is_some());
+            assert!(gm.find_region(addr2).is_none());
 
-        let (gm, region) = gm.remove_region(addr1, 0x1000).unwrap();
+            let (gm, region) = gm.remove_region(addr1, 0x1000).unwrap();
 
-        assert!(gm.find_region(addr1).is_none());
-        assert!(gm.find_region(addr2).is_none());
+            assert!(gm.find_region(addr1).is_none());
+            assert!(gm.find_region(addr2).is_none());
 
-        // Note that the `region` returned by `remove_region` is an `Arc<_>`, so users generally
-        // cannot mutate it (change its base address).  In this test, we can (we could unwrap the
-        // `Arc<_>`), but our users generally cannot, hence why this interface exists.
-        let region = GuestRegionMmap::with_arc(region.get_mmap(), addr2).unwrap();
+            // Note that the `region` returned by `remove_region` is an `Arc<_>`, so users
+            // generally cannot mutate it (change its base address). In this test, we can
+            // (we could unwrap the `Arc<_>`), but our users generally cannot, hence why this
+            // interface exists.
+            let region = AnyRegion::change_addr(region, addr2);
 
-        let gm = gm.insert_region(Arc::new(region)).unwrap();
+            let gm = gm.insert_region(Arc::new(region)).unwrap();
 
-        assert!(gm.find_region(addr1).is_none());
-        assert!(gm.find_region(addr2).is_some());
+            assert!(gm.find_region(addr1).is_none());
+            assert!(gm.find_region(addr2).is_some());
+        }
     }
 }
