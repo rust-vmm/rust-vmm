@@ -15,7 +15,7 @@
 // re-export for backward compat, as the trait used to be defined in mmap.rs
 pub use crate::bitmap::NewBitmap;
 
-#[cfg(all(not(feature = "xen"), target_family = "unix"))]
+#[cfg(target_family = "unix")]
 pub(super) mod unix;
 
 #[cfg(all(feature = "xen", target_family = "unix"))]
@@ -24,14 +24,15 @@ pub(super) mod xen;
 #[cfg(target_family = "windows")]
 pub(super) mod windows;
 
-#[cfg(all(not(feature = "xen"), target_family = "unix"))]
-pub use unix::{Error as MmapRegionError, MmapRegion, MmapRegionBuilder};
+#[cfg(target_family = "unix")]
+pub use unix::{
+    Error as MmapRegionError, GuestMemoryMmap, GuestRegionMmap, MmapRegion, MmapRegionBuilder,
+};
 
 #[cfg(all(feature = "xen", target_family = "unix"))]
 pub use xen::{
-    Error as MmapRegionErrorXen, GuestMemoryMmap, GuestMemoryXen,
-    GuestRegionMmap as GuestRegionMmapXen, MmapRangeXen, MmapRegion as MmapRegionXen,
-    MmapXenFlags,
+    Error as MmapRegionErrorXen, GuestMemoryMmap as GuestMemoryMmapXen, GuestMemoryXen,
+    GuestRegionMmap as GuestRegionMmapXen, MmapRangeXen, MmapRegion as MmapRegionXen, MmapXenFlags,
 };
 
 #[cfg(target_family = "windows")]
@@ -113,7 +114,7 @@ pub(crate) mod tests {
     any_backend! {
         #[cfg(all(windows, feature = "backend-mmap"))]
         Windows[crate::GuestRegionWindows<()>],
-        #[cfg(all(unix, feature = "backend-mmap", not(feature = "xen")))]
+        #[cfg(all(unix, feature = "backend-mmap"))]
         Mmap[crate::GuestRegionMmap<()>],
         #[cfg(all(unix, feature = "backend-mmap", feature = "xen"))]
         Xen[crate::MmapRegionXen]
@@ -132,7 +133,7 @@ pub(crate) mod tests {
                 )
                 .unwrap(),
             ));
-            #[cfg(all(unix, feature = "backend-mmap", not(feature = "xen")))]
+            #[cfg(all(unix, feature = "backend-mmap"))]
             regions.push(AnyRegion::Mmap(
                 crate::GuestRegionMmap::new(
                     crate::MmapRegion::from_file(f_off.clone(), size).unwrap(),
@@ -159,7 +160,7 @@ pub(crate) mod tests {
                     AnyRegion::Windows(GuestRegionMmap::with_arc(region.get_mmap(), addr).unwrap())
                 }
 
-                #[cfg(all(unix, feature = "backend-mmap", not(feature = "xen")))]
+                #[cfg(all(unix, feature = "backend-mmap"))]
                 AnyRegion::Mmap(region) => AnyRegion::Mmap(
                     crate::GuestRegionMmap::with_arc(region.get_mmap(), addr).unwrap(),
                 ),
@@ -190,7 +191,7 @@ pub(crate) mod tests {
                 )
                 .unwrap(),
             ));
-            #[cfg(all(unix, feature = "backend-mmap", not(feature = "xen")))]
+            #[cfg(all(unix, feature = "backend-mmap"))]
             regions.push(AnyRegion::Mmap(
                 crate::GuestRegionMmap::new(crate::MmapRegion::new(size).unwrap(), addr).unwrap(),
             ));
