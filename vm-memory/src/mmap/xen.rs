@@ -9,7 +9,10 @@
 
 use bitflags::bitflags;
 use libc::{c_int, c_void, _SC_PAGESIZE, MAP_SHARED};
-use std::{io, mem::size_of, os::raw::c_ulong, os::unix::io::AsRawFd, ptr::null_mut, result};
+use std::{
+    borrow::Borrow, io, mem::size_of, ops::Deref, os::raw::c_ulong, os::unix::io::AsRawFd,
+    ptr::null_mut, result, sync::Arc,
+};
 
 use vmm_sys_util::{
     fam::{Error as FamError, FamStruct, FamStructWrapper},
@@ -29,7 +32,7 @@ use crate::guest_memory::{FileOffset, GuestAddress};
 use crate::volatile_memory::{self, VolatileMemory, VolatileSlice};
 use crate::{
     guest_memory, Address, GuestMemoryRegion, GuestMemoryRegionBytes, GuestRegionCollection,
-    GuestUsize, MemoryRegionAddress,
+    GuestRegionCollectionError, GuestUsize, MemoryRegionAddress,
 };
 
 /// Error conditions that may arise when creating a new `MmapRegion` object.
@@ -226,7 +229,8 @@ impl<B: NewBitmap> MmapRegion<B> {
     /// use std::fs::File;
     /// use std::path::Path;
     /// use vm_memory::{
-    ///     Bytes, FileOffset, GuestAddress, GuestMemoryXen, MmapRange, MmapRegionXen, MmapXenFlags,
+    ///     Bytes, FileOffset, GuestAddress, GuestMemoryXen, MmapRangeXen, MmapRegionXen,
+    ///     MmapXenFlags,
     /// };
     /// # use vmm_sys_util::tempfile::TempFile;
     ///
@@ -257,7 +261,8 @@ impl<B: NewBitmap> MmapRegion<B> {
     /// use std::fs::File;
     /// use std::path::Path;
     /// use vm_memory::{
-    ///     Bytes, FileOffset, GuestAddress, GuestMemoryXen, MmapRange, MmapRegionXen, MmapXenFlags,
+    ///     Bytes, FileOffset, GuestAddress, GuestMemoryXen, MmapRangeXen, MmapRegionXen,
+    ///     MmapXenFlags,
     /// };
     /// # use vmm_sys_util::tempfile::TempFile;
     ///
@@ -268,10 +273,10 @@ impl<B: NewBitmap> MmapRegion<B> {
     ///     0,
     /// ));
     ///
-    /// let range = MmapRange::new(0x400, file, addr, MmapXenFlags::FOREIGN.bits(), 0);
+    /// let range = MmapRangeXen::new(0x400, file, addr, MmapXenFlags::FOREIGN.bits(), 0);
     /// # }
     /// # // We need a UNIX mapping for tests to succeed.
-    /// # let range = MmapRange::new_unix(0x400, None, addr);
+    /// # let range = MmapRangeXen::new_unix(0x400, None, addr);
     ///
     /// let r = MmapRegionXen::<()>::from_range(range).expect("Could not create mmap region");
     ///
@@ -424,6 +429,170 @@ impl<B: Bitmap> VolatileMemory for MmapRegion<B> {
                 )
             },
         )
+    }
+}
+
+/// [`GuestMemoryRegion`](trait.GuestMemoryRegion.html) implementation that mmaps the guest's
+/// memory region in the current process.
+///
+/// Represents a continuous region of the guest's physical memory that is backed by a mapping
+/// in the virtual address space of the calling process.
+#[derive(Debug)]
+pub struct GuestRegionMmap<B = ()> {
+    mapping: Arc<MmapRegion<B>>,
+    guest_base: GuestAddress,
+}
+
+impl<B> Deref for GuestRegionMmap<B> {
+    type Target = MmapRegion<B>;
+
+    fn deref(&self) -> &MmapRegion<B> {
+        self.mapping.as_ref()
+    }
+}
+
+impl<B: Bitmap> GuestRegionMmap<B> {
+    /// Create a new memory-mapped memory region for the guest's physical memory.
+    ///
+    /// Returns `None` if `guest_base` + `mapping.len()` would overflow.
+    pub fn new(mapping: MmapRegion<B>, guest_base: GuestAddress) -> Option<Self> {
+        Self::with_arc(Arc::new(mapping), guest_base)
+    }
+
+    /// Same as [`Self::new()`], but takes an `Arc`-wrapped `mapping`.
+    pub fn with_arc(mapping: Arc<MmapRegion<B>>, guest_base: GuestAddress) -> Option<Self> {
+        guest_base
+            .0
+            .checked_add(mapping.size() as u64)
+            .map(|_| Self {
+                mapping,
+                guest_base,
+            })
+    }
+
+    /// Return a clone of the inner `Arc<MmapRegion>` (as opposed to [`.deref()`](Self::deref()),
+    /// which bypasses the `Arc`).
+    ///
+    /// The returned reference can be used to construct a new `GuestRegionMmap` with a different
+    /// base address (e.g. when switching between memory address spaces based on the guest physical
+    /// address vs. the VMM userspace virtual address).
+    pub fn get_mmap(&self) -> Arc<MmapRegion<B>> {
+        Arc::clone(&self.mapping)
+    }
+}
+
+impl<B: NewBitmap> GuestRegionMmap<B> {
+    /// Create a new Unix memory-mapped memory region from guest's physical memory, size and file.
+    /// This must only be used for tests, doctests, benches and is not designed for end consumers.
+    pub fn from_range(
+        addr: GuestAddress,
+        size: usize,
+        file: Option<FileOffset>,
+    ) -> result::Result<Self, FromRangesError> {
+        let range = MmapRange::new_unix(size, file, addr);
+
+        let region = MmapRegion::from_range(range)?;
+        Self::new(region, addr).ok_or(FromRangesError::InvalidGuestRegion)
+    }
+}
+
+impl<B: Bitmap> GuestMemoryRegion for GuestRegionMmap<B> {
+    type B = B;
+
+    fn len(&self) -> GuestUsize {
+        self.mapping.size() as GuestUsize
+    }
+
+    fn start_addr(&self) -> GuestAddress {
+        self.guest_base
+    }
+
+    fn bitmap(&self) -> BS<'_, Self::B> {
+        self.mapping.bitmap().slice_at(0)
+    }
+
+    fn get_host_address(&self, addr: MemoryRegionAddress) -> guest_memory::Result<*mut u8> {
+        // Not sure why wrapping_offset is not unsafe.  Anyway this
+        // is safe because we've just range-checked addr using check_address.
+        self.check_address(addr)
+            .ok_or(guest_memory::Error::InvalidBackendAddress)
+            .map(|addr| {
+                self.mapping
+                    .as_ptr()
+                    .wrapping_offset(addr.raw_value() as isize)
+            })
+    }
+
+    fn file_offset(&self) -> Option<&FileOffset> {
+        self.mapping.file_offset()
+    }
+
+    fn get_slice(
+        &self,
+        offset: MemoryRegionAddress,
+        count: usize,
+    ) -> guest_memory::Result<VolatileSlice<'_, BS<'_, B>>> {
+        let slice =
+            VolatileMemory::get_slice(self.mapping.as_ref(), offset.raw_value() as usize, count)?;
+        Ok(slice)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn is_hugetlbfs(&self) -> Option<bool> {
+        self.mapping.is_hugetlbfs()
+    }
+}
+
+impl<B: Bitmap> GuestMemoryRegionBytes for GuestRegionMmap<B> {}
+
+/// [`GuestMemoryBackend`](trait.GuestMemoryBackend.html) implementation that mmaps the guest's memory
+/// in the current process.
+///
+/// Represents the entire physical memory of the guest by tracking all its memory regions.
+/// Each region is an instance of `GuestRegionMmap`, being backed by a mapping in the
+/// virtual address space of the calling process.
+pub type GuestMemoryMmap<B = ()> = GuestRegionCollection<GuestRegionMmap<B>>;
+
+/// Errors that can happen during [`GuestMemoryMmap::from_ranges`] and related functions.
+#[derive(Debug, thiserror::Error)]
+pub enum FromRangesError {
+    /// Error during construction of [`GuestMemoryMmap`]
+    #[error("Error constructing guest region collection: {0}")]
+    Collection(#[from] GuestRegionCollectionError),
+    /// Error while allocating raw mmap region
+    #[error("Error setting up raw memory for guest region: {0}")]
+    MmapRegion(#[from] Error),
+    /// A combination of region length and guest address would overflow.
+    #[error("Combination of guest address and region length invalid (would overflow)")]
+    InvalidGuestRegion,
+}
+
+impl<B: NewBitmap> GuestMemoryMmap<B> {
+    /// Creates a container and allocates anonymous memory for guest memory regions.
+    ///
+    /// Valid memory regions are specified as a slice of (Address, Size) tuples sorted by Address.
+    pub fn from_ranges(ranges: &[(GuestAddress, usize)]) -> result::Result<Self, FromRangesError> {
+        Self::from_ranges_with_files(ranges.iter().map(|r| (r.0, r.1, None)))
+    }
+
+    /// Creates a container and allocates anonymous memory for guest memory regions.
+    ///
+    /// Valid memory regions are specified as a sequence of (Address, Size, [`Option<FileOffset>`])
+    /// tuples sorted by Address.
+    pub fn from_ranges_with_files<A, T>(ranges: T) -> result::Result<Self, FromRangesError>
+    where
+        A: Borrow<(GuestAddress, usize, Option<FileOffset>)>,
+        T: IntoIterator<Item = A>,
+    {
+        Self::from_regions(
+            ranges
+                .into_iter()
+                .map(|x| {
+                    GuestRegionMmap::from_range(x.borrow().0, x.borrow().1, x.borrow().2.clone())
+                })
+                .collect::<std::result::Result<Vec<_>, _>>()?,
+        )
+        .map_err(Into::into)
     }
 }
 

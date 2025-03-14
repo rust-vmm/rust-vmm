@@ -182,7 +182,7 @@ impl FileOffset {
 /// # Examples (uses the `backend-mmap` and `backend-atomic` features)
 ///
 /// ```
-/// # #[cfg(feature = "backend-mmap")]
+/// # #[cfg(all(feature = "backend-mmap", target_family = "unix", not(feature = "xen")))]
 /// # {
 /// # use std::sync::Arc;
 /// # use vm_memory::{GuestAddress, GuestAddressSpace, GuestMemoryBackend, GuestMemoryMmap};
@@ -300,7 +300,7 @@ pub trait GuestMemoryBackend {
     ///   `backend-mmap` feature)
     ///
     /// ```
-    /// # #[cfg(feature = "backend-mmap")]
+    /// # #[cfg(all(feature = "backend-mmap", target_family = "unix", not(feature = "xen")))]
     /// # {
     /// # use vm_memory::{GuestAddress, GuestMemoryBackend, GuestMemoryRegion, GuestMemoryMmap};
     /// #
@@ -324,7 +324,7 @@ pub trait GuestMemoryBackend {
     /// # Examples (uses the `backend-mmap` feature)
     ///
     /// ```
-    /// # #[cfg(feature = "backend-mmap")]
+    /// # #[cfg(all(feature = "backend-mmap", target_family = "unix", not(feature = "xen")))]
     /// # {
     /// # use vm_memory::{Address, GuestAddress, GuestMemoryBackend, GuestMemoryMmap};
     /// #
@@ -439,7 +439,7 @@ pub trait GuestMemoryBackend {
     /// # Examples (uses the `backend-mmap` feature)
     ///
     /// ```
-    /// # #[cfg(feature = "backend-mmap")]
+    /// # #[cfg(all(feature = "backend-mmap", target_family = "unix", not(feature = "xen")))]
     /// # {
     /// # use vm_memory::{GuestAddress, GuestMemoryBackend, GuestMemoryMmap};
     /// #
@@ -608,7 +608,7 @@ impl<T: GuestMemory + ?Sized> Bytes<GuestAddress> for T {
     /// * Write a slice at guestaddress 0x1000. (uses the `backend-mmap` feature)
     ///
     /// ```
-    /// # #[cfg(feature = "backend-mmap")]
+    /// # #[cfg(all(feature = "backend-mmap", target_family = "unix", not(feature = "xen")))]
     /// # {
     /// # use vm_memory::{Bytes, GuestAddress, mmap::GuestMemoryMmap};
     /// #
@@ -636,7 +636,7 @@ impl<T: GuestMemory + ?Sized> Bytes<GuestAddress> for T {
     /// * Read a slice of length 16 at guestaddress 0x1000. (uses the `backend-mmap` feature)
     ///
     /// ```
-    /// # #[cfg(feature = "backend-mmap")]
+    /// # #[cfg(all(feature = "backend-mmap", target_family = "unix", not(feature = "xen")))]
     /// # {
     /// # use vm_memory::{Bytes, GuestAddress, mmap::GuestMemoryMmap};
     /// #
