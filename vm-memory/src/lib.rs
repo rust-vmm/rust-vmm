@@ -77,7 +77,7 @@ pub mod mmap;
 pub use mmap::{GuestMemoryXen, MmapRegionXen};
 
 #[cfg(all(feature = "backend-mmap", target_family = "unix"))]
-pub use mmap::{GuestMemoryMmap, GuestRegionMmap, MmapRegion, MmapRegionError};
+pub use mmap::{GuestMemoryMmap, GuestRegionMmap, MmapRegion, MmapRegionBuilder, MmapRegionError};
 
 #[cfg(all(feature = "backend-mmap", target_family = "unix", feature = "xen"))]
 pub use mmap::{
