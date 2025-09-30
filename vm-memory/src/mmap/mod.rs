@@ -32,7 +32,7 @@ pub use unix::{
 #[cfg(all(feature = "xen", target_family = "unix"))]
 pub use xen::{
     Error as MmapRegionErrorXen, GuestMemoryMmap as GuestMemoryMmapXen, GuestMemoryXen,
-    GuestRegionMmap as GuestRegionMmapXen, MmapRangeXen, MmapRegion as MmapRegionXen, MmapXenFlags,
+    GuestRegionMmap as GuestRegionMmapXen, GuestRegionXen, MmapRangeXen, MmapXenFlags,
 };
 
 #[cfg(target_family = "windows")]
@@ -117,7 +117,7 @@ pub(crate) mod tests {
         #[cfg(all(unix, feature = "backend-mmap"))]
         Mmap[crate::GuestRegionMmap<()>],
         #[cfg(all(unix, feature = "backend-mmap", feature = "xen"))]
-        Xen[crate::MmapRegionXen]
+        Xen[crate::GuestRegionXen]
     }
 
     // The cfgs make using vec![...] instead more unreadable, so suppress the lint here.
@@ -143,7 +143,7 @@ pub(crate) mod tests {
             ));
             #[cfg(all(unix, feature = "backend-mmap", feature = "xen"))]
             regions.push(AnyRegion::Xen(
-                crate::MmapRegionXen::from_range(crate::MmapRangeXen::new_unix(
+                crate::GuestRegionXen::from_range(crate::MmapRangeXen::new_unix(
                     size,
                     Some(f_off.clone()),
                     addr,
@@ -167,7 +167,7 @@ pub(crate) mod tests {
 
                 #[cfg(all(unix, feature = "backend-mmap", feature = "xen"))]
                 AnyRegion::Xen(region) => AnyRegion::Xen(
-                    crate::MmapRegionXen::from_range(crate::MmapRangeXen::new_unix(
+                    crate::GuestRegionXen::from_range(crate::MmapRangeXen::new_unix(
                         crate::GuestMemoryRegion::len(region) as usize,
                         None,
                         addr,
@@ -197,7 +197,7 @@ pub(crate) mod tests {
             ));
             #[cfg(all(unix, feature = "backend-mmap", feature = "xen"))]
             regions.push(AnyRegion::Xen(
-                crate::MmapRegionXen::from_range(crate::MmapRangeXen::new_unix(size, None, addr))
+                crate::GuestRegionXen::from_range(crate::MmapRangeXen::new_unix(size, None, addr))
                     .unwrap(),
             ));
             regions

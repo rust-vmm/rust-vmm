@@ -36,7 +36,7 @@ use crate::{
     GuestRegionCollectionError, GuestUsize, MemoryRegionAddress, MmapRegionBuilder,
 };
 
-/// Error conditions that may arise when creating a new `MmapRegion` object.
+/// Error conditions that may arise when creating a new `GuestRegionXen` object.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// The forbidden `MAP_FIXED` flag was specified.
@@ -146,7 +146,7 @@ impl MmapRangeXen {
 /// physical memory may be mapped into the current process due to the limited virtual address
 /// space size of the process.
 #[derive(Debug)]
-pub struct MmapRegion<B = ()> {
+pub struct GuestRegionXen<B = ()> {
     bitmap: B,
     size: usize,
     prot: i32,
@@ -156,7 +156,7 @@ pub struct MmapRegion<B = ()> {
     mmap: MmapXen,
 }
 
-impl<B: Bitmap> GuestMemoryRegion for MmapRegion<B> {
+impl<B: Bitmap> GuestMemoryRegion for GuestRegionXen<B> {
     type B = B;
 
     fn len(&self) -> GuestUsize {
@@ -171,7 +171,7 @@ impl<B: Bitmap> GuestMemoryRegion for MmapRegion<B> {
         self.bitmap.slice_at(0)
     }
 
-    // TODO: MmapRegion::as_ptr states that it should only be used for passing pointers to ioctls. Should this function then just remain the default implementation of returning Err(InvalidHostAddress)?
+    // TODO: GuestRegionXen::as_ptr states that it should only be used for passing pointers to ioctls. Should this function then just remain the default implementation of returning Err(InvalidHostAddress)?
     fn get_host_address(&self, addr: MemoryRegionAddress) -> crate::guest_memory::Result<*mut u8> {
         self.check_address(addr)
             .ok_or(guest_memory::Error::InvalidBackendAddress)
@@ -198,23 +198,23 @@ impl<B: Bitmap> GuestMemoryRegion for MmapRegion<B> {
     }
 }
 
-impl<B: Bitmap> GuestMemoryRegionBytes for MmapRegion<B> {}
+impl<B: Bitmap> GuestMemoryRegionBytes for GuestRegionXen<B> {}
 
 /// A collection of Xen guest memory regions.
 ///
 /// Represents the entire physical memory of the guest by tracking all its memory regions.
-/// Each region is an instance of [`MmapRegionXen`].
-pub type GuestMemoryXen<B> = GuestRegionCollection<MmapRegion<B>>;
+/// Each region is an instance of [`GuestRegionXen`].
+pub type GuestMemoryXen<B> = GuestRegionCollection<GuestRegionXen<B>>;
 
 // SAFETY: Send and Sync aren't automatically inherited for the raw address pointer.
 // Accessing that pointer is only done through the stateless interface which
 // allows the object to be shared by multiple threads without a decrease in
 // safety.
-unsafe impl<B: Send> Send for MmapRegion<B> {}
+unsafe impl<B: Send> Send for GuestRegionXen<B> {}
 // SAFETY: See comment above.
-unsafe impl<B: Sync> Sync for MmapRegion<B> {}
+unsafe impl<B: Sync> Sync for GuestRegionXen<B> {}
 
-impl<B: NewBitmap> MmapRegion<B> {
+impl<B: NewBitmap> GuestRegionXen<B> {
     /// Creates a shared anonymous mapping of `size` bytes.
     ///
     /// # Arguments
@@ -227,8 +227,7 @@ impl<B: NewBitmap> MmapRegion<B> {
     /// use std::fs::File;
     /// use std::path::Path;
     /// use vm_memory::{
-    ///     Bytes, FileOffset, GuestAddress, GuestMemoryXen, MmapRangeXen, MmapRegionXen,
-    ///     MmapXenFlags,
+    ///     Bytes, FileOffset, GuestAddress, GuestMemoryXen, GuestRegionXen, MmapRangeXen, MmapXenFlags,
     /// };
     /// # use vmm_sys_util::tempfile::TempFile;
     ///
@@ -244,7 +243,7 @@ impl<B: NewBitmap> MmapRegion<B> {
     /// # // We need a UNIX mapping for tests to succeed.
     /// # let range = MmapRangeXen::new_unix(0x400, None, addr);
     ///
-    /// let r = MmapRegionXen::<()>::from_range(range).expect("Could not create mmap region");
+    /// let r = GuestRegionXen::<()>::from_range(range).expect("Could not create mmap region");
     ///
     /// let mut gm = GuestMemoryXen::from_regions(vec![r]).expect("Could not create guest memory");
     /// let res = gm
@@ -259,8 +258,7 @@ impl<B: NewBitmap> MmapRegion<B> {
     /// use std::fs::File;
     /// use std::path::Path;
     /// use vm_memory::{
-    ///     Bytes, FileOffset, GuestAddress, GuestMemoryXen, MmapRangeXen, MmapRegionXen,
-    ///     MmapXenFlags,
+    ///     Bytes, FileOffset, GuestAddress, GuestMemoryXen, GuestRegionXen, MmapRangeXen, MmapXenFlags,
     /// };
     /// # use vmm_sys_util::tempfile::TempFile;
     ///
@@ -276,7 +274,7 @@ impl<B: NewBitmap> MmapRegion<B> {
     /// # // We need a UNIX mapping for tests to succeed.
     /// # let range = MmapRangeXen::new_unix(0x400, None, addr);
     ///
-    /// let r = MmapRegionXen::<()>::from_range(range).expect("Could not create mmap region");
+    /// let r = GuestRegionXen::<()>::from_range(range).expect("Could not create mmap region");
     ///
     /// let mut gm = GuestMemoryXen::from_regions(vec![r]).expect("Could not create guest memory");
     /// let res = gm
@@ -302,7 +300,7 @@ impl<B: NewBitmap> MmapRegion<B> {
 
         let mmap = MmapXen::new(&range)?;
 
-        Ok(MmapRegion {
+        Ok(GuestRegionXen {
             bitmap: B::with_len(range.size),
             size: range.size,
             prot: range.prot.ok_or(Error::Unexpected)?,
@@ -314,7 +312,7 @@ impl<B: NewBitmap> MmapRegion<B> {
     }
 }
 
-impl<B: Bitmap> MmapRegion<B> {
+impl<B: Bitmap> GuestRegionXen<B> {
     /// Returns a pointer to the beginning of the memory region. Mutable accesses performed
     /// using the resulting pointer are not automatically accounted for by the dirty bitmap
     /// tracking functionality.
@@ -349,7 +347,7 @@ impl<B: Bitmap> MmapRegion<B> {
     ///
     /// This is mostly a sanity check available for convenience, as different file descriptors
     /// can alias the same file.
-    pub fn fds_overlap<T: Bitmap>(&self, other: &MmapRegion<T>) -> bool {
+    pub fn fds_overlap<T: Bitmap>(&self, other: &GuestRegionXen<T>) -> bool {
         if let Some(f_off1) = self.file_offset() {
             if let Some(f_off2) = other.file_offset() {
                 if f_off1.file().as_raw_fd() == f_off2.file().as_raw_fd() {
@@ -395,7 +393,7 @@ impl<B: Bitmap> MmapRegion<B> {
     }
 }
 
-impl<B: Bitmap> VolatileMemory for MmapRegion<B> {
+impl<B: Bitmap> VolatileMemory for GuestRegionXen<B> {
     type B = B;
 
     fn len(&self) -> usize {
@@ -437,14 +435,14 @@ impl<B: Bitmap> VolatileMemory for MmapRegion<B> {
 /// in the virtual address space of the calling process.
 #[derive(Debug)]
 pub struct GuestRegionMmap<B = ()> {
-    mapping: Arc<MmapRegion<B>>,
+    mapping: Arc<GuestRegionXen<B>>,
     guest_base: GuestAddress,
 }
 
 impl<B> Deref for GuestRegionMmap<B> {
-    type Target = MmapRegion<B>;
+    type Target = GuestRegionXen<B>;
 
-    fn deref(&self) -> &MmapRegion<B> {
+    fn deref(&self) -> &GuestRegionXen<B> {
         self.mapping.as_ref()
     }
 }
@@ -453,12 +451,12 @@ impl<B: Bitmap> GuestRegionMmap<B> {
     /// Create a new memory-mapped memory region for the guest's physical memory.
     ///
     /// Returns `None` if `guest_base` + `mapping.len()` would overflow.
-    pub fn new(mapping: MmapRegion<B>, guest_base: GuestAddress) -> Option<Self> {
+    pub fn new(mapping: GuestRegionXen<B>, guest_base: GuestAddress) -> Option<Self> {
         Self::with_arc(Arc::new(mapping), guest_base)
     }
 
     /// Same as [`Self::new()`], but takes an `Arc`-wrapped `mapping`.
-    pub fn with_arc(mapping: Arc<MmapRegion<B>>, guest_base: GuestAddress) -> Option<Self> {
+    pub fn with_arc(mapping: Arc<GuestRegionXen<B>>, guest_base: GuestAddress) -> Option<Self> {
         guest_base
             .0
             .checked_add(mapping.size() as u64)
@@ -468,13 +466,13 @@ impl<B: Bitmap> GuestRegionMmap<B> {
             })
     }
 
-    /// Return a clone of the inner `Arc<MmapRegion>` (as opposed to [`.deref()`](Self::deref()),
+    /// Return a clone of the inner `Arc<GuestRegionXen>` (as opposed to [`.deref()`](Self::deref()),
     /// which bypasses the `Arc`).
     ///
     /// The returned reference can be used to construct a new `GuestRegionMmap` with a different
     /// base address (e.g. when switching between memory address spaces based on the guest physical
     /// address vs. the VMM userspace virtual address).
-    pub fn get_mmap(&self) -> Arc<MmapRegion<B>> {
+    pub fn get_mmap(&self) -> Arc<GuestRegionXen<B>> {
         Arc::clone(&self.mapping)
     }
 }
@@ -489,7 +487,7 @@ impl<B: NewBitmap> GuestRegionMmap<B> {
     ) -> result::Result<Self, FromRangesError> {
         let range = MmapRangeXen::new_unix(size, file, addr);
 
-        let region = MmapRegion::from_range(range)?;
+        let region = GuestRegionXen::from_range(range)?;
         Self::new(region, addr).ok_or(FromRangesError::InvalidGuestRegion)
     }
 }
@@ -559,7 +557,7 @@ pub enum FromRangesError {
     Collection(#[from] GuestRegionCollectionError),
     /// Error while allocating raw mmap region
     #[error("Error setting up raw memory for guest region: {0}")]
-    MmapRegion(#[from] Error),
+    GuestRegionXen(#[from] Error),
     /// A combination of region length and guest address would overflow.
     #[error("Combination of guest address and region length invalid (would overflow)")]
     InvalidGuestRegion,
@@ -1204,6 +1202,7 @@ mod tests {
     #![allow(clippy::undocumented_unsafe_blocks)]
 
     use super::*;
+    use crate::mmap::GuestRegionXen;
     use matches::assert_matches;
     use vmm_sys_util::tempfile::TempFile;
 
@@ -1240,8 +1239,8 @@ mod tests {
         }
     }
 
-    impl MmapRegion {
-        /// Create an `MmapRegion` with specified `size` at GuestAdress(0)
+    impl GuestRegionXen {
+        /// Create an `GuestRegionXen` with specified `size` at GuestAdress(0)
         pub fn new(size: usize) -> Result<Self> {
             let range = MmapRangeXen::new_unix(size, None, GuestAddress(0));
             Self::from_range(range)

@@ -74,7 +74,7 @@ pub use iommu::{Iommu, IommuMemory, Iotlb};
 pub mod mmap;
 
 #[cfg(all(feature = "xen", target_family = "unix"))]
-pub use mmap::{GuestMemoryXen, MmapRegionXen};
+pub use mmap::{GuestMemoryXen, GuestRegionXen};
 
 #[cfg(all(feature = "backend-mmap", target_family = "unix"))]
 pub use mmap::{GuestMemoryMmap, GuestRegionMmap, MmapRegion, MmapRegionBuilder, MmapRegionError};
