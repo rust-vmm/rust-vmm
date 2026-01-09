@@ -1,4 +1,5 @@
 [workspace]
 members = [
   "rust-vmm",
+  "vmm-sys-util",
 ]
