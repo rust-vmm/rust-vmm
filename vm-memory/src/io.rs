@@ -8,10 +8,10 @@ use crate::volatile_memory::copy_slice_impl::{copy_from_volatile_slice, copy_to_
 use crate::{VolatileMemoryError, VolatileSlice};
 use std::io::{Cursor, ErrorKind};
 
-#[cfg(feature = "rawfd")]
+#[cfg(all(feature = "rawfd", not(target_os = "windows")))]
 use std::io::Stdout;
 
-#[cfg(feature = "rawfd")]
+#[cfg(all(feature = "rawfd", not(target_os = "windows")))]
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
 
 macro_rules! retry_eintr {
@@ -131,7 +131,7 @@ pub trait WriteVolatile {
 
 macro_rules! impl_read_write_volatile_for_raw_fd {
     ($raw_fd_ty:ty) => {
-        #[cfg(feature = "rawfd")]
+        #[cfg(all(feature = "rawfd", not(target_os = "windows")))]
         impl ReadVolatile for $raw_fd_ty {
             fn read_volatile<B: BitmapSlice>(
                 &mut self,
@@ -141,7 +141,7 @@ macro_rules! impl_read_write_volatile_for_raw_fd {
             }
         }
 
-        #[cfg(feature = "rawfd")]
+        #[cfg(all(feature = "rawfd", not(target_os = "windows")))]
         impl ReadVolatile for &$raw_fd_ty {
             fn read_volatile<B: BitmapSlice>(
                 &mut self,
@@ -151,7 +151,7 @@ macro_rules! impl_read_write_volatile_for_raw_fd {
             }
         }
 
-        #[cfg(feature = "rawfd")]
+        #[cfg(all(feature = "rawfd", not(target_os = "windows")))]
         impl ReadVolatile for &mut $raw_fd_ty {
             fn read_volatile<B: BitmapSlice>(
                 &mut self,
@@ -161,7 +161,7 @@ macro_rules! impl_read_write_volatile_for_raw_fd {
             }
         }
 
-        #[cfg(feature = "rawfd")]
+        #[cfg(all(feature = "rawfd", not(target_os = "windows")))]
         impl WriteVolatile for $raw_fd_ty {
             fn write_volatile<B: BitmapSlice>(
                 &mut self,
@@ -171,7 +171,7 @@ macro_rules! impl_read_write_volatile_for_raw_fd {
             }
         }
 
-        #[cfg(feature = "rawfd")]
+        #[cfg(all(feature = "rawfd", not(target_os = "windows")))]
         impl WriteVolatile for &$raw_fd_ty {
             fn write_volatile<B: BitmapSlice>(
                 &mut self,
@@ -181,7 +181,7 @@ macro_rules! impl_read_write_volatile_for_raw_fd {
             }
         }
 
-        #[cfg(feature = "rawfd")]
+        #[cfg(all(feature = "rawfd", not(target_os = "windows")))]
         impl WriteVolatile for &mut $raw_fd_ty {
             fn write_volatile<B: BitmapSlice>(
                 &mut self,
@@ -193,7 +193,7 @@ macro_rules! impl_read_write_volatile_for_raw_fd {
     };
 }
 
-#[cfg(feature = "rawfd")]
+#[cfg(all(feature = "rawfd", not(target_os = "windows")))]
 impl WriteVolatile for Stdout {
     fn write_volatile<B: BitmapSlice>(
         &mut self,
@@ -203,7 +203,7 @@ impl WriteVolatile for Stdout {
     }
 }
 
-#[cfg(feature = "rawfd")]
+#[cfg(all(feature = "rawfd", not(target_os = "windows")))]
 impl WriteVolatile for &Stdout {
     fn write_volatile<B: BitmapSlice>(
         &mut self,
@@ -223,7 +223,7 @@ impl_read_write_volatile_for_raw_fd!(std::os::fd::BorrowedFd<'_>);
 /// the given [`VolatileSlice`].
 ///
 /// Returns the numbers of bytes read.
-#[cfg(feature = "rawfd")]
+#[cfg(all(feature = "rawfd", not(target_os = "windows")))]
 fn read_volatile_raw_fd(
     raw_fd: BorrowedFd<'_>,
     buf: &mut VolatileSlice<impl BitmapSlice>,
@@ -254,7 +254,7 @@ fn read_volatile_raw_fd(
 /// data stored in the given [`VolatileSlice`].
 ///
 /// Returns the numbers of bytes written.
-#[cfg(feature = "rawfd")]
+#[cfg(all(feature = "rawfd", not(target_os = "windows")))]
 fn write_volatile_raw_fd(
     raw_fd: BorrowedFd<'_>,
     buf: &VolatileSlice<impl BitmapSlice>,
@@ -435,9 +435,9 @@ mod tests {
     use crate::io::{ReadVolatile, WriteVolatile};
     use crate::{VolatileMemoryError, VolatileSlice};
     use std::io::{Cursor, ErrorKind};
-    #[cfg(feature = "rawfd")]
+    #[cfg(all(feature = "rawfd", not(target_os = "windows")))]
     use std::io::{Read, Seek, Write};
-    #[cfg(feature = "rawfd")]
+    #[cfg(all(feature = "rawfd", not(target_os = "windows")))]
     use vmm_sys_util::tempfile::TempFile;
 
     // ---- Test ReadVolatile for &[u8] ----
@@ -474,7 +474,7 @@ mod tests {
     }
 
     // ---- Test ReadVolatile for File ----
-    #[cfg(all(feature = "rawfd", not(miri)))]
+    #[cfg(all(feature = "rawfd", not(miri), not(target_os = "windows")))]
     fn read_4_bytes_from_file(source: Vec<u8>, expected_output: [u8; 5]) {
         let mut temp_file = TempFile::new().unwrap().into_file();
         temp_file.write_all(source.as_ref()).unwrap();
@@ -518,7 +518,7 @@ mod tests {
 
         for (input, output) in test_cases {
             read_4_bytes_to_5_byte_memory(input.clone(), output);
-            #[cfg(all(feature = "rawfd", not(miri)))]
+            #[cfg(all(feature = "rawfd", not(miri), not(target_os = "windows")))]
             read_4_bytes_from_file(input, output);
         }
     }
@@ -559,7 +559,7 @@ mod tests {
     }
 
     // ---- Test ẂriteVolatile for File works ----
-    #[cfg(all(feature = "rawfd", not(miri)))]
+    #[cfg(all(feature = "rawfd", not(miri), not(target_os = "windows")))]
     fn write_5_bytes_to_file(mut source: Vec<u8>) {
         // Test write_volatile for File works
         let mut temp_file = TempFile::new().unwrap().into_file();
@@ -603,7 +603,7 @@ mod tests {
 
         for (input, output) in test_cases {
             write_4_bytes_to_5_byte_vec(input.clone(), output);
-            #[cfg(all(feature = "rawfd", not(miri)))]
+            #[cfg(all(feature = "rawfd", not(miri), not(target_os = "windows")))]
             write_5_bytes_to_file(input);
         }
     }

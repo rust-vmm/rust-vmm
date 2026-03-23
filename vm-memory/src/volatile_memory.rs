@@ -1466,11 +1466,11 @@ mod tests {
     use super::*;
     use std::alloc::Layout;
 
-    #[cfg(feature = "rawfd")]
+    #[cfg(all(feature = "rawfd", not(target_os = "windows")))]
     use std::fs::File;
     #[cfg(feature = "backend-bitmap")]
     use std::mem::size_of_val;
-    #[cfg(feature = "rawfd")]
+    #[cfg(all(feature = "rawfd", not(target_os = "windows")))]
     use std::path::Path;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Barrier};
@@ -1479,7 +1479,7 @@ mod tests {
     use matches::assert_matches;
     #[cfg(feature = "backend-bitmap")]
     use std::num::NonZeroUsize;
-    #[cfg(feature = "rawfd")]
+    #[cfg(all(feature = "rawfd", not(target_os = "windows")))]
     use vmm_sys_util::tempfile::TempFile;
 
     #[cfg(feature = "backend-bitmap")]
@@ -1972,7 +1972,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "rawfd")]
+    #[cfg(all(feature = "rawfd", not(target_os = "windows")))]
     fn mem_read_and_write() {
         let mut backing = vec![0u8; 5];
         let a = VolatileSlice::from(backing.as_mut_slice());

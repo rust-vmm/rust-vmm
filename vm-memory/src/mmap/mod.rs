@@ -242,7 +242,7 @@ mod tests {
     use crate::{Bytes, GuestMemoryBackend, GuestMemoryError};
 
     use std::io::Write;
-    #[cfg(feature = "rawfd")]
+    #[cfg(all(feature = "rawfd", not(target_os = "windows")))]
     use std::{fs::File, path::Path};
     use vmm_sys_util::tempfile::TempFile;
 
@@ -473,7 +473,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "rawfd")]
+    #[cfg(all(feature = "rawfd", not(target_os = "windows")))]
     #[cfg(not(miri))]
     fn read_to_and_write_from_mem() {
         use std::mem;

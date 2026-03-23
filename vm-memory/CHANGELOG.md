@@ -11,6 +11,7 @@ However, common interfaces such as `GuestAddressSpace` and `Bytes` remain on
 `GuestMemory`; therefore, all callers that just use the `Bytes` interface
 remain completely unchanged.
 
+- \[[#63](https://github.com/rust-vmm/rust-vmm/pull/63)\] Make the 'rawfd' feature a NOP on Windows
 - \[[#362](https://github.com/rust-vmm/vm-memory/pull/362)\] Rename `GuestMemory` to `GuestMemoryBackend`, `IoMemory` to `GuestMemory`
 
 ### Added
