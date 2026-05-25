@@ -5,6 +5,7 @@
 ### Added
 
 - [[#254](https://github.com/rust-vmm/vmm-sys-util/pull/254)]: Support `TFD_NONBLOCK` for `timerfd::TimerFd`.
+- Add macOS support for the `signal` module. The shim is gated behind `#[cfg(target_os = "macos")]` and adds no new dependencies; Linux and Android builds are unaffected.
 
 ## v0.15.0
 
