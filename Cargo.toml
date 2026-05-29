@@ -3,6 +3,11 @@ repository = "https://github.com/rust-vmm/rust-vmm"
 
 [workspace]
 members = [
+  "vm-memory",
   "vmm-sys-util",
 ]
 resolver = "2"
+
+[profile.bench]
+lto = true
+codegen-units = 1
