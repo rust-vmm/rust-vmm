@@ -2,6 +2,16 @@
 
 ## Upcoming Release
 
+### Added
+
+- [[#198]](https://github.com/rust-vmm/rust-vmm/pull/198) Added `Cap::VmTypes`
+  for `KVM_CAP_VM_TYPES`.
+
+### Changed
+
+- [[#198]](https://github.com/rust-vmm/rust-vmm/pull/198) Exhaustive matches on
+  `Cap` must handle `VmTypes`.
+
 ## v0.25.1
 
 ### Changed
