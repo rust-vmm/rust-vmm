@@ -4,6 +4,8 @@
 
 ### Added
 
+- [[#198]](https://github.com/rust-vmm/rust-vmm/pull/198) Added `TdxExit` and
+  `VcpuExit::Tdx` on x86_64.
 - [[#198]](https://github.com/rust-vmm/rust-vmm/pull/198) Added `Cap::VmTypes`
   for `KVM_CAP_VM_TYPES`.
 
@@ -11,6 +13,10 @@
 
 - [[#198]](https://github.com/rust-vmm/rust-vmm/pull/198) Exhaustive matches on
   `Cap` must handle `VmTypes`.
+- [[#198]](https://github.com/rust-vmm/rust-vmm/pull/198) Exhaustive matches on
+  `VcpuExit` must handle `Tdx` on x86_64.
+- [[#198]](https://github.com/rust-vmm/rust-vmm/pull/198) `VcpuFd::run` returns
+  `VcpuExit::Tdx` instead of `VcpuExit::Unsupported` for `KVM_EXIT_TDX` on x86_64.
 
 ## v0.25.1
 
