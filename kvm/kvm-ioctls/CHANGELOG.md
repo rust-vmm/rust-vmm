@@ -4,6 +4,8 @@
 
 ### Added
 
+- [[#198]](https://github.com/rust-vmm/rust-vmm/pull/198) Added unsafe
+  `VmFd::encrypt_op_tdx` and `VcpuFd::encrypt_op_tdx` methods on x86_64.
 - [[#198]](https://github.com/rust-vmm/rust-vmm/pull/198) Added `TdxExit` and
   `VcpuExit::Tdx` on x86_64.
 - [[#198]](https://github.com/rust-vmm/rust-vmm/pull/198) Added `Cap::VmTypes`
