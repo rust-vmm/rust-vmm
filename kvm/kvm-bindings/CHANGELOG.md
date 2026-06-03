@@ -9,6 +9,8 @@
   and the RISC-V CFI/FWFT types.
 - [[#198]](https://github.com/rust-vmm/rust-vmm/pull/198) Added raw bitfield
   accessors on x86_64.
+- [[#198]](https://github.com/rust-vmm/rust-vmm/pull/198) Added `TdxCapabilities`
+  and `TdxInitVm` FAM wrappers on x86_64.
 
 ### Changed
 
