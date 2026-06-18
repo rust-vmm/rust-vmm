@@ -5,6 +5,7 @@
 ### Added
 
 - [[#254](https://github.com/rust-vmm/vmm-sys-util/pull/254)]: Support `TFD_NONBLOCK` for `timerfd::TimerFd`.
+- [[#26](https://github.com/rust-vmm/rust-vmm/pull/26)]: Add the `fcntl` module with file locking helpers.
 
 ## v0.15.0
 

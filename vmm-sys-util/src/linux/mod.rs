@@ -7,6 +7,7 @@ pub mod aio;
 pub mod epoll;
 pub mod eventfd;
 pub mod fallocate;
+pub mod fcntl;
 pub mod poll;
 pub mod seek_hole;
 pub mod signal;
