@@ -2,6 +2,13 @@
 
 ## Upcoming Release
 
+### Added
+
+- `VcpuFd::get_device_attr`, `VcpuFd::set_device_attr` and
+  `VcpuFd::has_device_attr` are now available on x86_64 as well as aarch64.
+  x86_64 needs them for the vCPU TSC attributes (`KVM_VCPU_TSC_CTRL`), which
+  let a VMM give every vCPU the same TSC offset after a restore or migration.
+
 ### Changed
 
 - [[#382]](https://github.com/rust-vmm/kvm/pull/382) `VmFd::enable_cap` and the
