@@ -1,0 +1,77 @@
+{
+  "tests": [
+    {
+      "test_name": "build-gnu",
+      "command": "cd {crate_path} && RUSTFLAGS=\"-D warnings\" cargo all-features build --release --all-targets",
+      "platform": ["x86_64", "aarch64", "riscv64"]
+    },
+    {
+      "test_name": "build-musl",
+      "command": "cd {crate_path} && RUSTFLAGS=\"-D warnings\" cargo all-features build --release --target {target_platform}-unknown-linux-musl --all-targets",
+      "platform": ["x86_64", "aarch64"]
+    },
+    {
+      "test_name": "unittests-gnu",
+      "command": "cd {crate_path} && cargo all-features test",
+      "platform": ["x86_64", "aarch64", "riscv64"],
+      "docker_plugin": {"privileged": true}
+    },
+    {
+      "test_name": "unittests-musl",
+      "command": "cd {crate_path} && cargo all-features test --target {target_platform}-unknown-linux-musl",
+      "platform": ["x86_64", "aarch64"],
+      "docker_plugin": {"privileged": true}
+    },
+    {
+      "test_name": "unittests-gnu-release",
+      "command": "cd {crate_path} && cargo all-features test --release",
+      "platform": ["x86_64", "aarch64", "riscv64"],
+      "docker_plugin": {"privileged": true}
+    },
+    {
+      "test_name": "unittests-musl-release",
+      "command": "cd {crate_path} && cargo all-features test --release --target {target_platform}-unknown-linux-musl",
+      "platform": ["x86_64", "aarch64"],
+      "docker_plugin": {"privileged": true}
+    },
+    {
+      "test_name": "clippy",
+      "command": "cd {crate_path} && cargo all-features clippy --all-targets -- -D warnings -D clippy::undocumented_unsafe_blocks",
+      "platform": ["x86_64", "aarch64", "riscv64"]
+    },
+    {
+      "test_name": "coverage",
+      "command": "ROOT=$$PWD && cd {crate_path} && pytest --test-scope=crate $(find \"$$ROOT\" -path \"*/integration_tests/test_coverage.py\")",
+      "docker_plugin": {"privileged": true},
+      "platform": ["x86_64", "aarch64"]
+    },
+    {
+      "test_name": "style",
+      "scope": "workspace",
+      "command": "cargo fmt --all -- --check --config format_code_in_doc_comments=true"
+    },
+    {
+      "test_name": "doc",
+      "scope": "workspace",
+      "command": "RUSTDOCFLAGS=\"-D warnings\" RUSTFLAGS=\"--cfg RUSTDOC_disable_feature_compat_errors\" cargo doc --workspace --all-features --no-deps"
+    },
+    {
+      "test_name": "cross-crate-check",
+      "scope": "workspace",
+      "command": "cargo check --workspace --all-targets",
+      "platform": ["x86_64"]
+    },
+    {
+      "test_name": "commit-format",
+      "scope": "workspace",
+      "command": "pytest $(find . -type f -name \"test_commit_format.py\")",
+      "docker_plugin": {"propagate-environment": true}
+    },
+    {
+      "test_name": "cargo-audit",
+      "scope": "workspace",
+      "command": "[ -e Cargo.lock ] || cargo generate-lockfile; cargo audit -q --deny warnings",
+      "platform": ["x86_64"]
+    }
+  ]
+}
