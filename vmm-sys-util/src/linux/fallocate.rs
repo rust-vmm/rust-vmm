@@ -38,7 +38,6 @@ pub enum FallocateMode {
 /// # Examples
 ///
 /// ```
-/// extern crate vmm_sys_util;
 /// # use std::fs::OpenOptions;
 /// # use std::path::PathBuf;
 /// use vmm_sys_util::fallocate::{fallocate, FallocateMode};

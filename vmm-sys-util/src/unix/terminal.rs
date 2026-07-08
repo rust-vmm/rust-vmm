@@ -122,7 +122,6 @@ pub unsafe trait Terminal {
     /// # Examples
     ///
     /// ```
-    /// extern crate vmm_sys_util;
     /// # use std::io;
     /// # use std::os::unix::io::RawFd;
     /// use vmm_sys_util::terminal::Terminal;
