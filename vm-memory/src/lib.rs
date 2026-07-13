@@ -46,7 +46,7 @@ pub use atomic_integer::AtomicInteger;
 pub mod bitmap;
 
 pub mod bytes;
-pub use bytes::{AtomicAccess, ByteValued, Bytes};
+pub use bytes::{AtomicAccess, Bytes};
 
 pub mod guest_memory;
 pub use guest_memory::{
