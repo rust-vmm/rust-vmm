@@ -34,7 +34,7 @@ use std::ptr::copy;
 use std::ptr::{read_volatile, write_volatile};
 use std::result;
 use std::sync::atomic::Ordering;
-use zerocopy::{FromBytes, FromZeros, IntoBytes};
+use zerocopy::{CastError, FromBytes, FromZeros, Immutable, IntoBytes, KnownLayout};
 
 use crate::atomic_integer::AtomicInteger;
 use crate::bitmap::{Bitmap, BitmapSlice, BS};
@@ -206,27 +206,36 @@ pub trait VolatileMemory {
     ///
     /// If the resulting pointer is not aligned, this method will return an
     /// [`Error`](enum.Error.html).
-    unsafe fn aligned_as_ref<T: Copy + Send + Sync + FromBytes + IntoBytes + FromZeros>(
+    unsafe fn aligned_as_ref<
+        T: Copy + Send + Sync + FromBytes + IntoBytes + FromZeros + Immutable + KnownLayout,
+    >(
         &self,
         offset: usize,
     ) -> Result<&T> {
         let slice = self.get_slice(offset, size_of::<T>())?;
-        slice.check_alignment(align_of::<T>())?;
 
-        assert_eq!(
-            slice.len(),
-            size_of::<T>(),
-            "VolatileMemory::get_slice(offset, count) returned slice of length != count."
-        );
+        let slice_addr = slice.addr;
+        let size_of_t = size_of::<T>();
 
-        // SAFETY: This is safe because the invariants of the constructors of VolatileSlice ensure that
-        // slice.addr is valid memory of size slice.len(). The assert above ensures that
-        // the length of the slice is exactly enough to hold one `T`.
-        // Dereferencing the pointer is safe because we check the alignment above, and the invariants
-        // of this function ensure that no aliasing pointers exist. Lastly, the lifetime of the
-        // returned VolatileArrayRef match that of the VolatileSlice returned by get_slice and thus the
-        // lifetime one `self`.
-        unsafe { Ok(&*(slice.addr as *const T)) }
+        // SAFETY: Creating a byte slice from the pointer is safe because the invariants of the
+        // constructors of VolatileSlice ensure that slice.addr is valid memory of size slice.len()
+        // and the invariants of this function ensure that no aliasing reference exists.
+        // Lastly, the lifetime of the returned reference matches that of the VolatileSlice returned
+        // by get_slice and thus the lifetime one `self`.
+        let rust_slice = unsafe { core::slice::from_raw_parts(slice_addr, size_of_t) };
+        T::ref_from_bytes(rust_slice).map_err(|error| match error {
+            CastError::<_, T>::Alignment(_) => Error::Misaligned {
+                addr: slice.addr.addr(),
+                alignment: align_of::<T>(),
+            },
+            CastError::<_, T>::Size(size) => {
+                panic!("VolatileMemory::get_slice({}, count) returned slice of length != count, expected: \"{}\" actual: \"{}\".", offset, size_of::<T>(), size.into_src().len());
+            }
+            CastError::<_, T>::Validity(infallible) => {
+                // Ensures this error is actually infallible.
+                match infallible {}
+            }
+        })
     }
 
     /// Returns a mutable reference to an instance of `T` at `offset`. Mutable accesses performed
@@ -245,28 +254,36 @@ pub trait VolatileMemory {
     // the function is unsafe, and the conversion is safe if following the safety
     // instrutions above
     #[allow(clippy::mut_from_ref)]
-    unsafe fn aligned_as_mut<T: Copy + Send + Sync + FromBytes + IntoBytes + FromZeros>(
+    unsafe fn aligned_as_mut<
+        T: Copy + Send + Sync + FromBytes + IntoBytes + FromZeros + KnownLayout,
+    >(
         &self,
         offset: usize,
     ) -> Result<&mut T> {
         let slice = self.get_slice(offset, size_of::<T>())?;
-        slice.check_alignment(align_of::<T>())?;
 
-        assert_eq!(
-            slice.len(),
-            size_of::<T>(),
-            "VolatileMemory::get_slice(offset, count) returned slice of length != count."
-        );
+        let slice_addr = slice.addr;
+        let size_of_t = size_of::<T>();
 
-        // SAFETY: This is safe because the invariants of the constructors of VolatileSlice ensure that
-        // slice.addr is valid memory of size slice.len(). The assert above ensures that
-        // the length of the slice is exactly enough to hold one `T`.
-        // Dereferencing the pointer is safe because we check the alignment above, and the invariants
-        // of this function ensure that no aliasing pointers exist. Lastly, the lifetime of the
-        // returned VolatileArrayRef match that of the VolatileSlice returned by get_slice and thus the
-        // lifetime one `self`.
-
-        unsafe { Ok(&mut *(slice.addr as *mut T)) }
+        // SAFETY: Creating a mutable byte slice from the pointer is safe because the invariants of the
+        // constructors of VolatileSlice ensure that slice.addr is valid memory of size slice.len()
+        // and the invariants of this function ensure that no aliasing reference exists.
+        // Lastly, the lifetime of the returned reference matches that of the VolatileSlice returned
+        // by get_slice and thus the lifetime one `self`.
+        let rust_slice = unsafe { core::slice::from_raw_parts_mut(slice_addr, size_of_t) };
+        T::mut_from_bytes(rust_slice).map_err(|error| match error {
+            CastError::<_, T>::Alignment(_) => Error::Misaligned {
+                addr: slice.addr.addr(),
+                alignment: align_of::<T>(),
+            },
+            CastError::<_, T>::Size(size) => {
+                panic!("VolatileMemory::get_slice({}, count) returned slice of length != count, expected: \"{}\" actual: \"{}\".", offset, size_of::<T>(), size.into_src().len());
+            }
+            CastError::<_, T>::Validity(infallible) => {
+                // Ensures this error is actually infallible.
+                match infallible {}
+            }
+        })
     }
 
     /// Returns a reference to an instance of `T` at `offset`. Mutable accesses performed
