@@ -49,7 +49,7 @@ impl TimerFd {
         // truncate unknown/invalid flags
         let flags = tfd_flags & TimerFdFlag::all();
         // SAFETY: Safe because this doesn't modify any memory and we check the return value.
-        let ret = unsafe { timerfd_create(CLOCK_MONOTONIC, flags.bits) };
+        let ret = unsafe { timerfd_create(CLOCK_MONOTONIC, flags.bits()) };
         if ret < 0 {
             return errno_result();
         }
