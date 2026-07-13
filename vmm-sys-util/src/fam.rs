@@ -1168,20 +1168,22 @@ mod tests {
         struct Foo {
             pub len: u32,
             pub padding: u32,
+            #[serde(skip)]
             pub entries: __IncompleteArrayField<u32>,
         }
 
         generate_fam_struct_impl!(Foo, u32, entries, u32, len, 100);
 
         let state = FamStructWrapper::<Foo>::new(0).unwrap();
-        let mut bytes = bincode::serialize(&state).unwrap();
+        let serialized = serde_json::to_string(&state).unwrap();
 
-        // The `len` field of the header is the first to be serialized.
-        // Writing at position 0 of the serialized data should change its value.
-        bytes[0] = 255;
+        let serialized = serialized.replace("\"len\":0", "\"len\":255");
 
         assert!(
-            matches!(bincode::deserialize::<FamStructWrapper<Foo>>(&bytes).map_err(|boxed| *boxed), Err(bincode::ErrorKind::Custom(s)) if s == *"Mismatch between length of FAM specified in FamStruct header (255) and actual size of FAM (0)")
+            serde_json::from_str::<FamStructWrapper<Foo>>(&serialized)
+            .unwrap_err()
+            .to_string()
+            .contains("Mismatch between length of FAM specified in FamStruct header (255) and actual size of FAM (0)")
         );
     }
 }
