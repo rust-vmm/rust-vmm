@@ -3,6 +3,14 @@ repository = "https://github.com/rust-vmm/rust-vmm"
 
 [workspace]
 members = [
+  "vm-memory",
   "vmm-sys-util",
 ]
 resolver = "2"
+
+# When running benchmark it's convenient to run with lto=true and codegen-units=1.
+# While these might increase the build time, it may also produce faster code. These
+# options are typically used in release binaries as well.
+[profile.bench]
+lto = true
+codegen-units = 1

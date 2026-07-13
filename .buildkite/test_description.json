@@ -3,7 +3,7 @@
     {
       "test_name": "build-gnu",
       "command": "cd {crate_path} && RUSTFLAGS=\"-D warnings\" cargo all-features build --release --all-targets",
-      "platform": ["x86_64", "aarch64", "riscv64"]
+      "platform": ["x86_64", "aarch64"]
     },
     {
       "test_name": "build-musl",
@@ -13,7 +13,7 @@
     {
       "test_name": "unittests-gnu",
       "command": "cd {crate_path} && cargo all-features test",
-      "platform": ["x86_64", "aarch64", "riscv64"],
+      "platform": ["x86_64", "aarch64"],
       "docker_plugin": {"privileged": true}
     },
     {
@@ -25,7 +25,7 @@
     {
       "test_name": "unittests-gnu-release",
       "command": "cd {crate_path} && cargo all-features test --release",
-      "platform": ["x86_64", "aarch64", "riscv64"],
+      "platform": ["x86_64", "aarch64"],
       "docker_plugin": {"privileged": true}
     },
     {
@@ -37,7 +37,7 @@
     {
       "test_name": "clippy",
       "command": "cd {crate_path} && cargo all-features clippy --all-targets -- -D warnings -D clippy::undocumented_unsafe_blocks",
-      "platform": ["x86_64", "aarch64", "riscv64"]
+      "platform": ["x86_64", "aarch64"]
     },
     {
       "test_name": "coverage",

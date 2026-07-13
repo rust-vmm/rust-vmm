@@ -1,0 +1,20 @@
+{
+  "tests": [
+    {
+      "test_name": "miri",
+      "command": "cd {crate_path} && RUST_BACKTRACE=1 MIRIFLAGS='-Zmiri-disable-isolation -Zmiri-backtrace=full' cargo +nightly miri test --features backend-mmap,backend-bitmap",
+      "platform": ["x86_64", "aarch64"],
+      "if_changed": "vm-memory/*",
+      "crate_path": "vm-memory"
+    },
+    {
+      "test_name": "check-windows-build",
+      "command": "cd {crate_path} && RUSTFLAGS=\"-D warnings\" cargo check --target x86_64-pc-windows-gnu --no-default-features --features backend-bitmap,backend-mmap,backend-atomic,iommu",
+      "platform": [
+        "x86_64"
+      ],
+      "if_changed": "vm-memory/*",
+      "crate_path": "vm-memory"
+    }
+  ]
+}
