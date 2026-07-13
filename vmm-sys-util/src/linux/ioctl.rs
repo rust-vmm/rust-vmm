@@ -20,7 +20,8 @@ use std::os::unix::io::AsRawFd;
 /// [_IOC](https://elixir.bootlin.com/linux/v5.10.129/source/arch/alpha/include/uapi/asm/ioctl.h#L40)
 /// ```
 /// # use std::os::raw::c_uint;
-/// # use vmm_sys_util::ioctl::{ioctl_expr, _IOC_NONE};
+/// use vmm_sys_util::ioctl::{ioctl_expr, _IOC_NONE};
+///
 /// const KVMIO: c_uint = 0xAE;
 /// ioctl_expr(_IOC_NONE, KVMIO, 0x01, 0);
 /// ```
@@ -39,9 +40,9 @@ pub const fn ioctl_expr(
 /// Declare a function that returns an ioctl number.
 ///
 /// ```
-/// # #[macro_use] extern crate vmm_sys_util;
 /// # use std::os::raw::c_uint;
 /// use vmm_sys_util::ioctl::_IOC_NONE;
+/// use vmm_sys_util::ioctl_ioc_nr;
 ///
 /// const KVMIO: c_uint = 0xAE;
 /// ioctl_ioc_nr!(KVM_CREATE_VM, _IOC_NONE, KVMIO, 0x01, 0);
@@ -67,8 +68,9 @@ macro_rules! ioctl_ioc_nr {
 /// Declare an ioctl that transfers no data.
 ///
 /// ```
-/// # #[macro_use] extern crate vmm_sys_util;
 /// # use std::os::raw::c_uint;
+/// use vmm_sys_util::ioctl_io_nr;
+///
 /// const KVMIO: c_uint = 0xAE;
 /// ioctl_io_nr!(KVM_CREATE_VM, KVMIO, 0x01);
 /// ```
@@ -85,7 +87,8 @@ macro_rules! ioctl_io_nr {
 /// Declare an ioctl that reads data.
 ///
 /// ```
-/// # #[macro_use] extern crate vmm_sys_util;
+/// use vmm_sys_util::ioctl_ior_nr;
+///
 /// const TUNTAP: ::std::os::raw::c_uint = 0x54;
 /// ioctl_ior_nr!(TUNGETFEATURES, TUNTAP, 0xcf, ::std::os::raw::c_uint);
 /// ```
@@ -115,7 +118,8 @@ macro_rules! ioctl_ior_nr {
 /// Declare an ioctl that writes data.
 ///
 /// ```
-/// # #[macro_use] extern crate vmm_sys_util;
+/// use vmm_sys_util::ioctl_iow_nr;
+///
 /// const TUNTAP: ::std::os::raw::c_uint = 0x54;
 /// ioctl_iow_nr!(TUNSETQUEUE, TUNTAP, 0xd9, ::std::os::raw::c_int);
 /// ```
@@ -145,7 +149,8 @@ macro_rules! ioctl_iow_nr {
 /// Declare an ioctl that reads and writes data.
 ///
 /// ```
-/// # #[macro_use] extern crate vmm_sys_util;
+/// use vmm_sys_util::ioctl_iowr_nr;
+///
 /// const VHOST: ::std::os::raw::c_uint = 0xAF;
 /// ioctl_iowr_nr!(VHOST_GET_VRING_BASE, VHOST, 0x12, ::std::os::raw::c_int);
 /// ```
@@ -227,14 +232,12 @@ type IoctlRequest = c_int;
 /// # Examples
 ///
 /// ```
-/// # extern crate libc;
-/// # #[macro_use] extern crate vmm_sys_util;
-/// #
 /// # use libc::{open, O_CLOEXEC, O_RDWR};
 /// # use std::fs::File;
 /// # use std::os::raw::{c_char, c_uint};
 /// # use std::os::unix::io::FromRawFd;
 /// use vmm_sys_util::ioctl::ioctl;
+/// use vmm_sys_util::ioctl_io_nr;
 ///
 /// const KVMIO: c_uint = 0xAE;
 /// const KVM_API_VERSION: u32 = 12;
@@ -269,13 +272,12 @@ pub unsafe fn ioctl<F: AsRawFd>(fd: &F, req: c_ulong) -> c_int {
 /// # Examples
 ///
 /// ```
-/// # extern crate libc;
-/// # #[macro_use] extern crate vmm_sys_util;
 /// # use libc::{open, O_CLOEXEC, O_RDWR};
 /// # use std::fs::File;
 /// # use std::os::raw::{c_char, c_uint, c_ulong};
 /// # use std::os::unix::io::FromRawFd;
 /// use vmm_sys_util::ioctl::ioctl_with_val;
+/// use vmm_sys_util::ioctl_io_nr;
 ///
 /// const KVMIO: c_uint = 0xAE;
 /// const KVM_CAP_USER_MEMORY: u32 = 3;

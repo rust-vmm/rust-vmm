@@ -374,7 +374,6 @@ impl WatchingEvents {
 /// # Examples
 ///
 /// ```
-/// extern crate vmm_sys_util;
 /// use vmm_sys_util::eventfd::EventFd;
 /// use vmm_sys_util::poll::{EpollContext, EpollEvents};
 ///
@@ -405,7 +404,6 @@ impl<T: PollToken> EpollContext<T> {
     /// # Examples
     ///
     /// ```
-    /// extern crate vmm_sys_util;
     /// use vmm_sys_util::poll::EpollContext;
     ///
     /// let ctx: EpollContext<usize> = EpollContext::new().unwrap();
@@ -439,7 +437,6 @@ impl<T: PollToken> EpollContext<T> {
     /// # Examples
     ///
     /// ```
-    /// extern crate vmm_sys_util;
     /// use vmm_sys_util::eventfd::EventFd;
     /// use vmm_sys_util::poll::EpollContext;
     ///
@@ -468,7 +465,6 @@ impl<T: PollToken> EpollContext<T> {
     /// # Examples
     ///
     /// ```
-    /// extern crate vmm_sys_util;
     /// use vmm_sys_util::eventfd::EventFd;
     /// use vmm_sys_util::poll::{EpollContext, WatchingEvents};
     ///
@@ -517,7 +513,6 @@ impl<T: PollToken> EpollContext<T> {
     /// # Examples
     ///
     /// ```
-    /// extern crate vmm_sys_util;
     /// use vmm_sys_util::eventfd::EventFd;
     /// use vmm_sys_util::poll::{EpollContext, WatchingEvents};
     ///
@@ -563,7 +558,6 @@ impl<T: PollToken> EpollContext<T> {
     /// # Examples
     ///
     /// ```
-    /// extern crate vmm_sys_util;
     /// use vmm_sys_util::eventfd::EventFd;
     /// use vmm_sys_util::poll::EpollContext;
     ///
@@ -604,7 +598,6 @@ impl<T: PollToken> EpollContext<T> {
     /// # Examples
     ///
     /// ```
-    /// extern crate vmm_sys_util;
     /// use vmm_sys_util::eventfd::EventFd;
     /// use vmm_sys_util::poll::{EpollContext, EpollEvents};
     ///
@@ -637,7 +630,6 @@ impl<T: PollToken> EpollContext<T> {
     /// # Examples
     ///
     /// ```
-    /// extern crate vmm_sys_util;
     /// # use std::time::Duration;
     /// use vmm_sys_util::eventfd::EventFd;
     /// use vmm_sys_util::poll::{EpollContext, EpollEvents};
@@ -719,9 +711,10 @@ impl<T: PollToken> IntoRawFd for EpollContext<T> {
 /// # Example
 ///
 /// ```
-/// # use vmm_sys_util::errno::Result;
-/// # use vmm_sys_util::eventfd::EventFd;
-/// # use vmm_sys_util::poll::{PollContext, PollEvents};
+/// use vmm_sys_util::errno::Result;
+/// use vmm_sys_util::eventfd::EventFd;
+/// use vmm_sys_util::poll::{PollContext, PollEvents};
+///
 /// let evt1 = EventFd::new(0).unwrap();
 /// let evt2 = EventFd::new(0).unwrap();
 /// evt2.write(1).unwrap();
