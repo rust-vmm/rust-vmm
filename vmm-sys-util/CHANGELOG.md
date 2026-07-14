@@ -6,6 +6,10 @@
 
 - [[#254](https://github.com/rust-vmm/vmm-sys-util/pull/254)]: Support `TFD_NONBLOCK` for `timerfd::TimerFd`.
 
+### Changed
+
+- [[#56](https://github.com/rust-vmm/rust-vmm/pull/56)]: Rename `with-serde` Cargo feature references to `serde` in the FAM module.
+
 ## v0.15.0
 
 ### Added

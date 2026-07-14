@@ -16,13 +16,13 @@
 //!
 //! For example the KVM API has many structures of this kind.
 
-#[cfg(feature = "with-serde")]
+#[cfg(feature = "serde")]
 use serde::de::{self, Deserialize, Deserializer, SeqAccess, Visitor};
-#[cfg(feature = "with-serde")]
+#[cfg(feature = "serde")]
 use serde::{ser::SerializeTuple, Serialize, Serializer};
 use std::fmt;
 use std::fmt::{Debug, Formatter};
-#[cfg(feature = "with-serde")]
+#[cfg(feature = "serde")]
 use std::marker::PhantomData;
 use std::mem::{self, size_of};
 
@@ -548,7 +548,7 @@ impl<T: Default + FamStruct> Clone for FamStructWrapper<T> {
     }
 }
 
-#[cfg(feature = "with-serde")]
+#[cfg(feature = "serde")]
 impl<T: Default + FamStruct + Serialize> Serialize for FamStructWrapper<T>
 where
     <T as FamStruct>::Entry: serde::Serialize,
@@ -564,7 +564,7 @@ where
     }
 }
 
-#[cfg(feature = "with-serde")]
+#[cfg(feature = "serde")]
 impl<'de, T: Default + FamStruct + Deserialize<'de>> Deserialize<'de> for FamStructWrapper<T>
 where
     <T as FamStruct>::Entry: std::marker::Copy + serde::Deserialize<'de>,
@@ -658,7 +658,7 @@ macro_rules! generate_fam_struct_impl {
 mod tests {
     #![allow(clippy::undocumented_unsafe_blocks)]
 
-    #[cfg(feature = "with-serde")]
+    #[cfg(feature = "serde")]
     use serde_derive::{Deserialize, Serialize};
 
     use super::*;
@@ -691,7 +691,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "with-serde")]
+    #[cfg(feature = "serde")]
     impl<T> Serialize for __IncompleteArrayField<T> {
         fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
         where
@@ -701,7 +701,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "with-serde")]
+    #[cfg(feature = "serde")]
     impl<'de, T> Deserialize<'de> for __IncompleteArrayField<T> {
         fn deserialize<D>(_: D) -> std::result::Result<Self, D::Error>
         where
@@ -1027,17 +1027,17 @@ mod tests {
         assert_eq!(data[0].padding, 5);
     }
 
-    #[cfg(feature = "with-serde")]
+    #[cfg(feature = "serde")]
     #[test]
     fn test_ser_deser() {
         #[repr(C)]
         #[derive(Default, PartialEq)]
-        #[cfg_attr(feature = "with-serde", derive(Deserialize, Serialize))]
+        #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
         struct Message {
             pub len: u32,
             pub padding: u32,
             pub value: u32,
-            #[cfg_attr(feature = "with-serde", serde(skip))]
+            #[cfg_attr(feature = "serde", serde(skip))]
             pub entries: __IncompleteArrayField<u32>,
         }
 
@@ -1075,12 +1075,12 @@ mod tests {
 
         #[repr(C)]
         #[derive(Default)]
-        #[cfg_attr(feature = "with-serde", derive(Deserialize, Serialize))]
+        #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
         struct Message2 {
             pub len: u32,
             pub padding: u32,
             pub value: u32,
-            #[cfg_attr(feature = "with-serde", serde(skip))]
+            #[cfg_attr(feature = "serde", serde(skip))]
             pub entries: __IncompleteArrayField<u32>,
         }
 
@@ -1160,7 +1160,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "with-serde")]
+    #[cfg(feature = "serde")]
     #[test]
     fn test_bad_deserialize() {
         #[repr(C)]
