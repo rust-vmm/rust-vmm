@@ -1031,13 +1031,12 @@ mod tests {
     #[test]
     fn test_ser_deser() {
         #[repr(C)]
-        #[derive(Default, PartialEq)]
-        #[cfg_attr(feature = "with-serde", derive(Deserialize, Serialize))]
+        #[derive(Default, PartialEq, Deserialize, Serialize)]
         struct Message {
             pub len: u32,
             pub padding: u32,
             pub value: u32,
-            #[cfg_attr(feature = "with-serde", serde(skip))]
+            #[serde(skip)]
             pub entries: __IncompleteArrayField<u32>,
         }
 
@@ -1074,13 +1073,12 @@ mod tests {
         assert!(serde_json::from_str::<MessageFamStructWrapper>(bad_data_ser).is_err());
 
         #[repr(C)]
-        #[derive(Default)]
-        #[cfg_attr(feature = "with-serde", derive(Deserialize, Serialize))]
+        #[derive(Default, Deserialize, Serialize)]
         struct Message2 {
             pub len: u32,
             pub padding: u32,
             pub value: u32,
-            #[cfg_attr(feature = "with-serde", serde(skip))]
+            #[serde(skip)]
             pub entries: __IncompleteArrayField<u32>,
         }
 
