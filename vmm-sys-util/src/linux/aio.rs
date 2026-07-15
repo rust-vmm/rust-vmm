@@ -113,18 +113,20 @@ impl IoContext {
     ///
     /// # Examples
     /// ```
+    /// use std::mem::MaybeUninit;
     /// use vmm_sys_util::aio::*;
     /// # use std::fs::File;
     /// # use std::os::unix::io::AsRawFd;
     ///
     /// let file = File::open("/dev/zero").unwrap();
     /// let ctx = IoContext::new(128).unwrap();
-    /// let mut buf: [u8; 4096] = unsafe { std::mem::uninitialized() };
+    /// const BUF_LEN: usize = 4096;
+    /// let mut buf = MaybeUninit::<[u8; BUF_LEN]>::uninit();
     /// let iocbs = [&mut IoControlBlock {
     ///     aio_fildes: file.as_raw_fd() as u32,
     ///     aio_lio_opcode: IOCB_CMD_PREAD as u16,
-    ///     aio_buf: buf.as_mut_ptr() as u64,
-    ///     aio_nbytes: buf.len() as u64,
+    ///     aio_buf: buf.as_mut_ptr() as *mut u8 as u64,
+    ///     aio_nbytes: BUF_LEN as u64,
     ///     ..Default::default()
     /// }];
     /// // SAFETY: The buffer is kept alive and exclusively owned until the operation is complete.
@@ -187,34 +189,36 @@ impl IoContext {
     /// # Examples
     ///
     /// ```
+    /// use std::mem::MaybeUninit;
     /// use vmm_sys_util::aio::*;
     /// # use std::fs::File;
     /// # use std::os::unix::io::AsRawFd;
     ///
     /// let file = File::open("/dev/zero").unwrap();
     /// let ctx = IoContext::new(128).unwrap();
-    /// let mut buf1: [u8; 4096] = unsafe { std::mem::uninitialized() };
-    /// let mut buf2: [u8; 4096] = unsafe { std::mem::uninitialized() };
+    /// const BUF_LEN: usize = 4096;
+    /// let mut buf1 = MaybeUninit::<[u8; BUF_LEN]>::uninit();
+    /// let mut buf2 = MaybeUninit::<[u8; BUF_LEN]>::uninit();
     /// let iocbs = [
     ///     &mut IoControlBlock {
     ///         aio_fildes: file.as_raw_fd() as u32,
     ///         aio_lio_opcode: IOCB_CMD_PREAD as u16,
-    ///         aio_buf: buf1.as_mut_ptr() as u64,
-    ///         aio_nbytes: buf1.len() as u64,
+    ///         aio_buf: buf1.as_mut_ptr() as *mut u8 as u64,
+    ///         aio_nbytes: BUF_LEN as u64,
     ///         ..Default::default()
     ///     },
     ///     &mut IoControlBlock {
     ///         aio_fildes: file.as_raw_fd() as u32,
     ///         aio_lio_opcode: IOCB_CMD_PREAD as u16,
-    ///         aio_buf: buf2.as_mut_ptr() as u64,
-    ///         aio_nbytes: buf2.len() as u64,
+    ///         aio_buf: buf2.as_mut_ptr() as *mut u8 as u64,
+    ///         aio_nbytes: BUF_LEN as u64,
     ///         ..Default::default()
     ///     },
     /// ];
     ///
     /// // SAFETY: The referenced buffers live until both operations are complete.
     /// let mut rc = unsafe { ctx.submit(&iocbs[..]) }.unwrap();
-    /// let mut events = [unsafe { std::mem::uninitialized::<IoEvent>() }];
+    /// let mut events = [IoEvent::default()];
     /// rc = ctx.get_events(1, &mut events, None).unwrap();
     /// assert_eq!(rc, 1);
     /// assert!(events[0].res > 0);
