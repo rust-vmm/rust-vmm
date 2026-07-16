@@ -24,6 +24,7 @@ const BUFFEROP: u8 = 0x11;
 const PACKAGEOP: u8 = 0x12;
 const VARPACKAGEOP: u8 = 0x13;
 const METHODOP: u8 = 0x14;
+const EXTERNALOP: u8 = 0x15;
 const IRQNOFLAGSDESC: u8 = 0x22;
 const IRQDESC: u8 = 0x23;
 const DUALNAMEPREFIX: u8 = 0x2e;
@@ -956,6 +957,56 @@ impl Aml for Method<'_> {
         sink.byte(METHODOP);
         sink.vec(&pkg_length);
         sink.vec(&bytes);
+    }
+}
+
+// ACPI spec Table 19.36
+#[derive(Copy, Clone, Debug)]
+pub enum ExternalObjectType {
+    Uninitialzed = 0,
+    Integer = 1,
+    String = 2,
+    Buffer = 3,
+    Package = 4,
+    FieldUnit = 5,
+    Device = 6,
+    Event = 7,
+    Method = 8,
+    Mutex = 9,
+    OperationRegion = 10,
+    PowerResource = 11,
+    // Reserved = 12,
+    ThermalZone = 13,
+    BufferField = 14,
+    // Reserved = 15,
+    DebugObject = 16,
+}
+
+pub struct External {
+    path: Path,
+    object_type: ExternalObjectType,
+    args: Option<u8>,
+}
+
+impl External {
+    pub fn new(path: Path, object_type: ExternalObjectType, args: Option<u8>) -> Self {
+        Self {
+            path,
+            object_type,
+            args,
+        }
+    }
+}
+
+impl Aml for External {
+    fn to_aml_bytes(&self, sink: &mut dyn AmlSink) {
+        let mut bytes = Vec::new();
+        self.path.to_aml_bytes(&mut bytes);
+
+        sink.byte(EXTERNALOP);
+        sink.vec(&bytes);
+        sink.byte(self.object_type as u8);
+        sink.byte(self.args.unwrap_or_default());
     }
 }
 
@@ -2211,6 +2262,20 @@ mod tests {
         aml.clear();
         "ACPI".to_owned().to_aml_bytes(&mut aml);
         assert_eq!(aml, [0x0d, b'A', b'C', b'P', b'I', 0]);
+    }
+
+    #[test]
+    fn test_external() {
+        let mut aml = Vec::new();
+        External::new("TEST".into(), ExternalObjectType::Method, Some(3)).to_aml_bytes(&mut aml);
+        External::new("TEST".into(), ExternalObjectType::Package, None).to_aml_bytes(&mut aml);
+        assert_eq!(
+            aml,
+            [
+                0x15, 0x54, 0x45, 0x53, 0x54, 0x08, 0x03, // External (TEST, Method, 3)
+                0x15, 0x54, 0x45, 0x53, 0x54, 0x04, 0x00, // External (TEST, Package)
+            ],
+        );
     }
 
     #[test]
