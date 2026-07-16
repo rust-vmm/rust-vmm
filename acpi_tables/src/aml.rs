@@ -123,6 +123,7 @@ impl Aml for Ones {
 /// Name/Device/Method/Scope and so on...
 pub struct Path {
     root: bool,
+    parent: bool,
     name_parts: Vec<[u8; 4]>,
 }
 
@@ -130,6 +131,8 @@ impl Aml for Path {
     fn to_aml_bytes(&self, sink: &mut dyn AmlSink) {
         if self.root {
             sink.byte(b'\\');
+        } else if self.parent {
+            sink.byte(b'^');
         }
 
         match self.name_parts.len() {
@@ -155,7 +158,9 @@ impl Path {
     /// not has 4 bytes will not be accepted.
     pub fn new(name: &str) -> Self {
         let root = name.starts_with('\\');
-        let offset = root as usize;
+        let parent = name.starts_with('^');
+        let offset = (root || parent) as usize;
+
         let mut name_parts = Vec::new();
         for part in name[offset..].split('.') {
             assert_eq!(part.len(), 4);
@@ -164,7 +169,11 @@ impl Path {
             name_parts.push(name_part);
         }
 
-        Path { root, name_parts }
+        Path {
+            root,
+            parent,
+            name_parts,
+        }
     }
 }
 
@@ -2071,6 +2080,9 @@ mod tests {
         aml.clear();
         (&"\\_SB_".into() as &Path).to_aml_bytes(&mut aml);
         assert_eq!(aml, [0x5C, 0x5F, 0x53, 0x42, 0x5F]);
+        aml.clear();
+        (&"^_SB_".into() as &Path).to_aml_bytes(&mut aml);
+        assert_eq!(aml, [0x5E, 0x5F, 0x53, 0x42, 0x5F]);
         aml.clear();
         (&"_SB_.COM1".into() as &Path).to_aml_bytes(&mut aml);
         assert_eq!(aml, [0x2E, 0x5F, 0x53, 0x42, 0x5F, 0x43, 0x4F, 0x4D, 0x31]);
