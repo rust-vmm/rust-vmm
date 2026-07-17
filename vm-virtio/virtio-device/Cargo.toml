@@ -1,0 +1,19 @@
+[package]
+name = "virtio-device"
+version = "0.1.0"
+authors = ["The Chromium OS Authors"]
+description = "virtio generic device implementation"
+repository.workspace = true
+keywords = ["virtio"]
+readme = "README.md"
+license = "Apache-2.0 OR MIT"
+edition = "2021"
+
+[dependencies]
+vm-memory = { workspace = true }
+log = "0.4.17"
+virtio-bindings = { path = "../virtio-bindings" }
+virtio-queue = { path = "../virtio-queue", version = "0.18.0"}
+
+[dev-dependencies]
+vm-memory = { workspace = true, features = ["backend-mmap", "backend-atomic"] }

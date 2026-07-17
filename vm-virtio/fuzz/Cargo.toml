@@ -1,0 +1,41 @@
+[package]
+name = "rust-vmm-fuzz"
+version = "0.1.0"
+authors = ["Delia-Maria Pavel <delia_maria.pavel@stud.acs.upb.ro>", "rust-vmm AWS maintainers rust-vmm-maintainers@amazon.com"]
+description = "virtio fuzzing"
+edition = "2018"
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = []
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+bincode = "1.3.3"
+libfuzzer-sys = "0.4"
+serde = "1.0.63"
+memfd = "0.6.3"
+virtio-queue = { path = "../virtio-queue", features = ["test-utils"] }
+virtio-vsock = { path = "../virtio-vsock" }
+virtio-queue-ser = { path = "../virtio-queue-ser" }
+vm-memory = { version = "0.18.0", features = ["backend-mmap", "backend-atomic"] }
+common = { path = "common" }
+virtio-blk = { path = "../virtio-blk", features = ["backend-stdio"] }
+
+[[bin]]
+name = "virtio_queue"
+path = "fuzz_targets/virtio_queue.rs"
+
+[[bin]]
+name = "vsock"
+path = "fuzz_targets/vsock.rs"
+
+[[bin]]
+name = "virtio_queue_ser"
+path = "fuzz_targets/virtio_queue_ser.rs"
+
+[[bin]]
+name = "blk"
+path = "fuzz_targets/blk.rs"

@@ -6,6 +6,13 @@ members = [
   "acpi_tables",
   "vm-memory",
   "vmm-sys-util",
+  "vm-virtio/virtio-bindings",
+  "vm-virtio/virtio-blk",
+  "vm-virtio/virtio-console",
+  "vm-virtio/virtio-device",
+  "vm-virtio/virtio-queue",
+  "vm-virtio/virtio-queue-ser",
+  "vm-virtio/virtio-vsock",
 ]
 resolver = "2"
 
@@ -15,3 +22,7 @@ resolver = "2"
 [profile.bench]
 lto = true
 codegen-units = 1
+
+[workspace.dependencies]
+vm-memory = { version = "0.18.0", path = "vm-memory" }
+vmm-sys-util = { version = "0.15.0", path = "vmm-sys-util" }

@@ -1,3 +1,4 @@
 /acpi_tables/ @jiangliu @liuw @rbradford @sboeuf
 /vmm-sys-util/ @andreeaflorescu @ShadowCurse
 /vm-memory/ @alexandruag @bonzini @jiangliu @tkreuzer @roypat @ShadowCurse @XanClic
+/vm-virtio/ @alexandruag @andreeaflorescu @jiangliu @slp @stsquad @epilys @stefano-garzarella

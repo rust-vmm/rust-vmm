@@ -1,0 +1,25 @@
+[package]
+name = "virtio-blk"
+version = "0.1.0"
+authors = ["The Chromium OS Authors"]
+description = "virtio block device implementation"
+repository.workspace = true
+keywords = ["virtio"]
+readme = "README.md"
+license = "Apache-2.0 OR MIT"
+edition = "2021"
+
+[features]
+backend-stdio = []
+
+[dependencies]
+vm-memory = { workspace = true }
+vmm-sys-util = { workspace = true }
+log = "0.4.17"
+virtio-queue = { path = "../virtio-queue" }
+virtio-device = { path = "../virtio-device" }
+virtio-bindings = { path = "../virtio-bindings", version = "0.2.6" }
+
+[dev-dependencies]
+vm-memory = { workspace = true, features = ["backend-mmap", "backend-atomic"] }
+virtio-queue = { path = "../virtio-queue", features = ["test-utils"] }

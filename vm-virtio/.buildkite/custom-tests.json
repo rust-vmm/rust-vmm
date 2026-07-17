@@ -1,0 +1,78 @@
+{
+  "tests": [
+    {
+      "test_name": "build-gnu-backend-stdio",
+      "command": "cargo build --release --workspace --features virtio-blk/backend-stdio",
+      "platform": ["x86_64", "aarch64"],
+      "if_changed": "vm-virtio/*",
+      "crate_path": "vm-virtio"
+    },
+    {
+      "test_name": "build-musl-backend-stdio",
+      "command": "cargo build --release --workspace --features virtio-blk/backend-stdio --target {target_platform}-unknown-linux-musl",
+      "platform": ["x86_64", "aarch64"],
+      "if_changed": "vm-virtio/*",
+      "crate_path": "vm-virtio"
+    },
+    {
+      "test_name": "fuzz-fmt",
+      "command": "cargo fmt --manifest-path fuzz/Cargo.toml --all -- --check --config format_code_in_doc_comments=true",
+      "platform": ["x86_64"],
+      "if_changed": "vm-virtio/*",
+      "crate_path": "vm-virtio"
+    },
+    {
+      "test_name": "fuzz-input-tests",
+      "command": "cd fuzz && cargo test --package common",
+      "platform": ["x86_64", "aarch64"],
+      "if_changed": "vm-virtio/*",
+      "crate_path": "vm-virtio"
+    },
+    {
+      "test_name": "fuzz-build",
+      "command": "cd fuzz && cargo +nightly build",
+      "platform": ["x86_64", "aarch64"],
+      "if_changed": "vm-virtio/*",
+      "crate_path": "vm-virtio"
+    },
+    {
+      "test_name": "fuzz-virtio-queue",
+      "command": "cd fuzz && cargo test --package common --lib virtio_queue && cargo +nightly fuzz run virtio_queue -- -max_total_time=900 -timeout=60s",
+      "platform": ["x86_64", "aarch64"],
+      "timeout_in_minutes": 20,
+      "if_changed": "vm-virtio/*",
+      "crate_path": "vm-virtio"
+    },
+    {
+      "test_name": "fuzz-virtio-queue-ser",
+      "command": "cd fuzz && cargo test --package common --lib virtio_queue_ser && cargo +nightly fuzz run virtio_queue_ser -- -max_total_time=900 -timeout=60s",
+      "platform": ["x86_64", "aarch64"],
+      "timeout_in_minutes": 20,
+      "if_changed": "vm-virtio/*",
+      "crate_path": "vm-virtio"
+    },
+    {
+      "test_name": "fuzz-vsock-packet",
+      "command": "cd fuzz && cargo test --package common --lib vsock && cargo +nightly fuzz run vsock -- -max_total_time=900 -timeout=60s",
+      "platform": ["x86_64", "aarch64"],
+      "timeout_in_minutes": 20,
+      "if_changed": "vm-virtio/*",
+      "crate_path": "vm-virtio"
+    },
+    {
+      "test_name": "fuzz-virtio-blk",
+      "command": "cd fuzz && cargo test --package common --lib blk && cargo +nightly fuzz run blk -- -max_total_time=900 -timeout=60s",
+      "platform": ["x86_64", "aarch64"],
+      "timeout_in_minutes": 20,
+      "if_changed": "vm-virtio/*",
+      "crate_path": "vm-virtio"
+    },
+    {
+      "test_name": "prove-virtio-queue",
+      "command": "cargo kani --package virtio-queue",
+      "platform": ["x86_64", "aarch64"],
+      "if_changed": "vm-virtio/*",
+      "crate_path": "vm-virtio"
+    }
+  ]
+}
