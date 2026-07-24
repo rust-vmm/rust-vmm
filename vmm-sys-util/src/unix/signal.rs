@@ -8,12 +8,19 @@
 
 //! Enums, traits and functions for working with
 //! [`signal`](http://man7.org/linux/man-pages/man7/signal.7.html).
+//!
+//! Shared across Unix targets. Real-time signals (`SIGRTMIN`/`SIGRTMAX`) and
+//! `sigtimedwait` exist only on Linux/Android; those items are gated and other
+//! platforms (e.g. macOS) use portable fallbacks.
 
 use libc::{
     c_int, c_void, pthread_kill, pthread_sigmask, pthread_t, sigaction, sigaddset, sigemptyset,
-    sigfillset, siginfo_t, sigismember, sigpending, sigset_t, sigtimedwait, timespec, EAGAIN,
-    EINTR, EINVAL, SIG_BLOCK, SIG_UNBLOCK,
+    sigfillset, siginfo_t, sigismember, sigpending, sigset_t, EINVAL, SIG_BLOCK, SIG_UNBLOCK,
 };
+// `sigtimedwait` and the errnos it reports back are Linux-only; other platforms
+// lack the syscall and drain pending signals differently (see `clear_signal`).
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use libc::{sigtimedwait, timespec, EAGAIN, EINTR};
 
 use crate::errno;
 use std::fmt::{self, Display};
@@ -86,12 +93,16 @@ pub type SignalResult<T> = result::Result<T, Error>;
 pub type SignalHandler =
     extern "C" fn(num: c_int, info: *mut siginfo_t, _unused: *mut c_void) -> ();
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
 extern "C" {
     fn __libc_current_sigrtmin() -> c_int;
     fn __libc_current_sigrtmax() -> c_int;
 }
 
 /// Return the minimum (inclusive) real-time signal number.
+///
+/// Only available on Linux/Android, which provide POSIX real-time signals.
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[allow(non_snake_case)]
 pub fn SIGRTMIN() -> c_int {
     // SAFETY: We trust this libc function.
@@ -99,6 +110,9 @@ pub fn SIGRTMIN() -> c_int {
 }
 
 /// Return the maximum (inclusive) real-time signal number.
+///
+/// Only available on Linux/Android, which provide POSIX real-time signals.
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[allow(non_snake_case)]
 pub fn SIGRTMAX() -> c_int {
     // SAFETY: We trust this libc function.
@@ -107,8 +121,11 @@ pub fn SIGRTMAX() -> c_int {
 
 /// Verify that a signal number is valid.
 ///
-/// Supported signals range from `SIGHUP` to `SIGSYS` and from `SIGRTMIN` to `SIGRTMAX`.
-/// We recommend using realtime signals `[SIGRTMIN(), SIGRTMAX()]` for VCPU threads.
+/// On Linux/Android, supported signals range from `SIGHUP` to `SIGSYS` and from
+/// `SIGRTMIN` to `SIGRTMAX`; realtime signals `[SIGRTMIN(), SIGRTMAX()]` are
+/// recommended for VCPU threads. Other platforms (e.g. macOS) have no realtime
+/// signals, so the accepted range is `1..=SIGUSR2` — note that macOS signal
+/// numbers are not ordered like Linux's (`SIGSYS` is 12 but `SIGUSR2` is 31).
 ///
 /// # Arguments
 ///
@@ -122,7 +139,14 @@ pub fn SIGRTMAX() -> c_int {
 /// let num = validate_signal_num(1).unwrap();
 /// ```
 pub fn validate_signal_num(num: c_int) -> errno::Result<()> {
-    if (libc::SIGHUP..=libc::SIGSYS).contains(&num) || (SIGRTMIN() <= num && num <= SIGRTMAX()) {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    let valid =
+        (libc::SIGHUP..=libc::SIGSYS).contains(&num) || (SIGRTMIN() <= num && num <= SIGRTMAX());
+    // No real-time signals here; accept the standard signal range.
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    let valid = (1..=libc::SIGUSR2).contains(&num);
+
+    if valid {
         Ok(())
     } else {
         Err(errno::Error::new(EINVAL))
@@ -249,7 +273,14 @@ pub fn get_blocked_signals() -> SignalResult<Vec<c_int>> {
             return Err(Error::RetrieveSignalMask(ret));
         }
 
-        for num in 0..=SIGRTMAX() {
+        // Upper bound differs by platform: Linux/Android extend through the
+        // real-time signals; other Unixes stop at the highest standard signal.
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        let max = SIGRTMAX();
+        #[cfg(not(any(target_os = "linux", target_os = "android")))]
+        let max = libc::SIGUSR2;
+
+        for num in 1..=max {
             if sigismember(&old_sigset, num) > 0 {
                 mask.push(num);
             }
@@ -358,6 +389,10 @@ pub fn unblock_signal(num: c_int) -> SignalResult<()> {
 pub fn clear_signal(num: c_int) -> SignalResult<()> {
     let sigset = create_sigset(&[num]).map_err(Error::CreateSigset)?;
 
+    // On Linux/Android, `sigtimedwait` dequeues a pending instance of the signal
+    // without delivering it (no handler or default action runs). Loop until none
+    // remain pending.
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     while {
         // SAFETY: This is safe as we are rigorously checking return values
         // of libc calls.
@@ -398,6 +433,46 @@ pub fn clear_signal(num: c_int) -> SignalResult<()> {
         }
     } {}
 
+    // Other Unixes (e.g. macOS) have no `sigtimedwait`. Simply unblocking to let
+    // the signal deliver would run its handler or default action (for e.g.
+    // SIGUSR1/SIGUSR2 the default action terminates the process). Instead,
+    // temporarily set the disposition to `SIG_IGN`: per POSIX, changing a
+    // signal's action to `SIG_IGN` discards any pending instance without running
+    // a handler or the default action. We then briefly unblock/re-block so a
+    // just-generated instance is also cleared, and restore the prior disposition.
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    // SAFETY: the `sigaction`/`pthread_sigmask`/`sigpending`/`sigismember` calls
+    // have their return values checked; the structs are POD, zero-initialised,
+    // and `sa_mask` is emptied before use. A null oldset is valid for
+    // `pthread_sigmask`.
+    unsafe {
+        let mut old_action: sigaction = mem::zeroed();
+        let mut ign_action: sigaction = mem::zeroed();
+        ign_action.sa_sigaction = libc::SIG_IGN;
+        if sigemptyset(&mut ign_action.sa_mask) < 0 {
+            return Err(Error::ClearWaitPending(errno::Error::last()));
+        }
+        // Install SIG_IGN, capturing the current disposition to restore later.
+        if sigaction(num, &ign_action, &mut old_action) < 0 {
+            return Err(Error::ClearWaitPending(errno::Error::last()));
+        }
+
+        let _ = pthread_sigmask(SIG_UNBLOCK, &sigset, null_mut());
+        let _ = pthread_sigmask(SIG_BLOCK, &sigset, null_mut());
+
+        // Restore the previous disposition.
+        let _ = sigaction(num, &old_action, null_mut());
+
+        // Confirm nothing remains pending.
+        let mut chkset: sigset_t = mem::zeroed();
+        if sigpending(&mut chkset) < 0 {
+            return Err(Error::ClearGetPending(errno::Error::last()));
+        }
+        if sigismember(&chkset, num) < 0 {
+            return Err(Error::ClearCheckPending(errno::Error::last()));
+        }
+    }
+
     Ok(())
 }
 
@@ -437,10 +512,18 @@ pub unsafe trait Killable {
 // SAFETY: Safe because we fulfill our contract of returning a genuine pthread handle.
 unsafe impl<T> Killable for JoinHandle<T> {
     fn pthread_handle(&self) -> pthread_t {
-        // JoinHandleExt::as_pthread_t gives c_ulong, convert it to the
-        // type that the libc crate expects
-        assert_eq!(mem::size_of::<pthread_t>(), mem::size_of::<usize>());
-        self.as_pthread_t() as usize as pthread_t
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        {
+            // JoinHandleExt::as_pthread_t gives c_ulong, convert it to the
+            // type that the libc crate expects
+            assert_eq!(mem::size_of::<pthread_t>(), mem::size_of::<usize>());
+            self.as_pthread_t() as usize as pthread_t
+        }
+        // On macOS `as_pthread_t()` already yields `pthread_t` (a pointer type).
+        #[cfg(not(any(target_os = "linux", target_os = "android")))]
+        {
+            self.as_pthread_t() as pthread_t
+        }
     }
 }
 
@@ -451,12 +534,10 @@ mod tests {
     use std::thread;
     use std::time::Duration;
 
-    // Reserve for each vcpu signal.
     static mut SIGNAL_HANDLER_CALLED: bool = false;
 
     extern "C" fn handle_signal(_: c_int, _: *mut siginfo_t, _: *mut c_void) {
         unsafe {
-            // In the tests, there only uses vcpu signal.
             SIGNAL_HANDLER_CALLED = true;
         }
     }
@@ -469,14 +550,68 @@ mod tests {
         }
     }
 
+    // A signal safe to register and deliver in tests. Linux/Android use a
+    // real-time signal (guaranteed unused by the C runtime); other Unixes
+    // (e.g. macOS) have no real-time signals, so use SIGUSR1.
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn test_signal() -> c_int {
+        SIGRTMIN()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    fn test_signal() -> c_int {
+        libc::SIGUSR1
+    }
+
+    // A second, distinct signal used for the block/clear tests.
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn clearable_signal() -> c_int {
+        SIGRTMIN() + 1
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    fn clearable_signal() -> c_int {
+        libc::SIGUSR2
+    }
+
+    // A signal number just past the valid range for the platform.
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn invalid_signal() -> c_int {
+        SIGRTMAX() + 1
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    fn invalid_signal() -> c_int {
+        libc::SIGUSR2 + 1
+    }
+
+    #[test]
+    fn test_validate_signal_num() {
+        // Invariants that hold on every platform.
+        assert!(validate_signal_num(0).is_err());
+        assert!(validate_signal_num(-1).is_err());
+        assert!(validate_signal_num(libc::SIGHUP).is_ok());
+        assert!(validate_signal_num(libc::SIGSYS).is_ok());
+        assert!(validate_signal_num(invalid_signal()).is_err());
+
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        {
+            assert!(validate_signal_num(SIGRTMIN()).is_ok());
+            assert!(validate_signal_num(SIGRTMAX()).is_ok());
+        }
+        // On macOS, SIGUSR2 (31) is the top of the valid range — exactly the
+        // case the Linux `SIGHUP..=SIGSYS` check rejected (SIGSYS is only 12).
+        #[cfg(not(any(target_os = "linux", target_os = "android")))]
+        {
+            assert!(validate_signal_num(libc::SIGUSR2).is_ok());
+        }
+    }
+
     #[test]
     fn test_register_signal_handler() {
-        // testing bad value
+        // SIGKILL / SIGSTOP can never be caught; out-of-range must fail; a
+        // valid signal must succeed.
         assert!(register_signal_handler(libc::SIGKILL, handle_signal).is_err());
         assert!(register_signal_handler(libc::SIGSTOP, handle_signal).is_err());
-        assert!(register_signal_handler(SIGRTMAX() + 1, handle_signal).is_err());
-        assert!(register_signal_handler(SIGRTMAX(), handle_signal).is_ok());
-        assert!(register_signal_handler(SIGRTMIN(), handle_signal).is_ok());
+        assert!(register_signal_handler(invalid_signal(), handle_signal).is_err());
+        assert!(register_signal_handler(test_signal(), handle_signal).is_ok());
         assert!(register_signal_handler(libc::SIGSYS, handle_signal).is_ok());
     }
 
@@ -490,19 +625,19 @@ mod tests {
         // We install a signal handler for the specified signal; otherwise the whole process will
         // be brought down when the signal is received, as part of the default behaviour. Signal
         // handlers are global, so we install this before starting the thread.
-        register_signal_handler(SIGRTMIN(), handle_signal)
+        register_signal_handler(test_signal(), handle_signal)
             .expect("failed to register vcpu signal handler");
 
         let killable = thread::spawn(|| loop {});
 
-        let res = killable.kill(SIGRTMAX() + 1);
+        let res = killable.kill(invalid_signal());
         assert!(res.is_err());
 
         unsafe {
             assert!(!SIGNAL_HANDLER_CALLED);
         }
 
-        assert!(killable.kill(SIGRTMIN()).is_ok());
+        assert!(killable.kill(test_signal()).is_ok());
 
         // We're waiting to detect that the signal handler has been called.
         const MAX_WAIT_ITERS: u32 = 20;
@@ -527,7 +662,7 @@ mod tests {
 
     #[test]
     fn test_block_unblock_signal() {
-        let signal = SIGRTMIN();
+        let signal = clearable_signal();
 
         // Check if it is blocked.
         unsafe {
@@ -545,7 +680,7 @@ mod tests {
 
     #[test]
     fn test_clear_pending() {
-        let signal = SIGRTMIN() + 1;
+        let signal = clearable_signal();
 
         block_signal(signal).unwrap();
 
@@ -565,7 +700,7 @@ mod tests {
         });
 
         // Send a signal to the thread.
-        assert!(killable.kill(SIGRTMIN() + 1).is_ok());
+        assert!(killable.kill(clearable_signal()).is_ok());
         killable.join().unwrap();
     }
 }
