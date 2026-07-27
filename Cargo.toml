@@ -6,6 +6,7 @@ members = [
   "acpi_tables",
   "vm-memory",
   "vmm-sys-util",
+  "linux-loader"
 ]
 resolver = "2"
 
