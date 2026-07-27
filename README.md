@@ -36,6 +36,7 @@ rust-vmm crates in the root organization [rust-vmm](https://github.com/rust-vmm)
 
 - [acpi_tables](acpi_tables): Infrastructure for creating dynamic (via AML) and
   static ACPI tables.
+- [linux-loader](linux-loader): Linux kernel image loading crate.
 - [vmm-sys-util](vmm-sys-util): Helpers and utilities used by multiple rust-vmm
   components.
 - [vm-memory](vm-memory): Virtual machine's guest memory crate.
