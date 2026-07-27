@@ -7,7 +7,9 @@
                 "x86_64",
                 "aarch64"
             ],
-            "timeout_in_minutes": 15
+            "timeout_in_minutes": 15,
+            "if_changed": "linux-loader/*",
+            "crate_path": "linux-loader"
         }
     ]
 }
