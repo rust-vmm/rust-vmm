@@ -642,9 +642,10 @@ mod tests {
 
         // Same as above, but with read_exact. Should fail now, because we cannot fill a 4 byte buffer
         // with whats remaining in the cursor (3 bytes). Output should remain unchanged.
-        assert!(cursor
+
+        cursor
             .read_exact_volatile(&mut VolatileSlice::from(&mut output[..4]))
-            .is_err());
+            .unwrap_err();
         assert_eq!(output, vec![1, 2, 3, 4, 0]);
     }
 
