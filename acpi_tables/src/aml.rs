@@ -736,11 +736,11 @@ pub struct Interrupt {
     edge_triggered: bool,
     active_low: bool,
     shared: bool,
-    number: u32,
+    numbers: Vec<u32>,
 }
 
 impl Interrupt {
-    /// Create Interrupt object
+    /// Create Interrupt object with a single interrupt number.
     pub fn new(
         consumer: bool,
         edge_triggered: bool,
@@ -748,12 +748,23 @@ impl Interrupt {
         shared: bool,
         number: u32,
     ) -> Self {
+        Self::new_multiple(consumer, edge_triggered, active_low, shared, vec![number])
+    }
+
+    /// Create Interrupt object with multiple interrupt numbers.
+    pub fn new_multiple(
+        consumer: bool,
+        edge_triggered: bool,
+        active_low: bool,
+        shared: bool,
+        numbers: Vec<u32>,
+    ) -> Self {
         Interrupt {
             consumer,
             edge_triggered,
             active_low,
             shared,
-            number,
+            numbers,
         }
     }
 }
@@ -761,14 +772,14 @@ impl Interrupt {
 impl Aml for Interrupt {
     fn to_aml_bytes(&self, sink: &mut dyn AmlSink) {
         sink.byte(EXTIRQDESC); /* Extended IRQ Descriptor */
-        sink.word(6);
+        sink.word(2 + 4 * self.numbers.len() as u16);
         let flags = ((self.shared as u8) << 3)
             | ((self.active_low as u8) << 2)
             | ((self.edge_triggered as u8) << 1)
             | self.consumer as u8;
         sink.byte(flags);
-        sink.byte(1); /* count */
-        sink.dword(self.number);
+        sink.byte(self.numbers.len() as u8); /* count */
+        self.numbers.iter().for_each(|n| sink.dword(*n));
     }
 }
 
@@ -1997,6 +2008,11 @@ mod tests {
                 {
                     0x00000004,
                 }
+                Interrupt (ResourceConsumer, Edge, ActiveHigh, Exclusive, ,, )
+                {
+                    0x00000005,
+                    0x00000006,
+                }
                 IRQ (Edge, ActiveHigh, Exclusive, )
                     {7}
                 IRQNoFlags ()
@@ -2011,15 +2027,17 @@ mod tests {
 
         */
         let interrupt_io_data = [
-            0x08, 0x5F, 0x43, 0x52, 0x53, 0x11, 0x1D, 0x0A, 0x1A, 0x89, 0x06, 0x00, 0x03, 0x01,
-            0x04, 0x00, 0x00, 0x00, 0x23, 0x80, 0x00, 0x01, 0x22, 0x00, 0x01, 0x47, 0x01, 0xF8,
-            0x03, 0xF8, 0x03, 0x00, 0x08, 0x79, 0x00,
+            0x08, 0x5F, 0x43, 0x52, 0x53, 0x11, 0x2A, 0x0A, 0x27, 0x89, 0x06, 0x00, 0x03, 0x01,
+            0x04, 0x00, 0x00, 0x00, 0x89, 0x0A, 0x00, 0x03, 0x02, 0x05, 0x00, 0x00, 0x00, 0x06,
+            0x00, 0x00, 0x00, 0x23, 0x80, 0x00, 0x01, 0x22, 0x00, 0x01, 0x47, 0x01, 0xF8, 0x03,
+            0xF8, 0x03, 0x00, 0x08, 0x79, 0x00,
         ];
         aml.clear();
         Name::new(
             "_CRS".into(),
             &ResourceTemplate::new(vec![
                 &Interrupt::new(true, true, false, false, 4),
+                &Interrupt::new_multiple(true, true, false, false, vec![5, 6]),
                 &Irq::new(true, false, false, 7),
                 &IrqNoFlags::new(8),
                 &IO::new(0x3f8, 0x3f8, 0, 0x8),
