@@ -26,6 +26,7 @@ const VARPACKAGEOP: u8 = 0x13;
 const METHODOP: u8 = 0x14;
 const IRQNOFLAGSDESC: u8 = 0x22;
 const IRQDESC: u8 = 0x23;
+const DMADESC: u8 = 0x2a;
 const DUALNAMEPREFIX: u8 = 0x2e;
 const MULTINAMEPREFIX: u8 = 0x2f;
 const NAMECHARBASE: u8 = 0x40;
@@ -830,6 +831,66 @@ fn write_irq_mask_bytes(number: u8, sink: &mut dyn AmlSink) {
     } else {
         sink.byte(0);
         sink.byte(1 << (number - 8));
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum DmaChannelSpeed {
+    Compatibility = 0b00,
+    TypeA = 0b01,
+    TypeB = 0b10,
+    TypeF = 0b11,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum DmaMasterStatus {
+    NotMaster = 0,
+    Master = 1,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum DmaTransferType {
+    Transfer8 = 0b00,
+    Transfer8_16 = 0b01,
+    Transfer16 = 0b10,
+}
+
+/// DMA resource object.
+pub struct Dma {
+    channels: Vec<u8>,
+    speed: DmaChannelSpeed,
+    status: DmaMasterStatus,
+    transfer: DmaTransferType,
+}
+
+impl Dma {
+    pub fn new(
+        speed: DmaChannelSpeed,
+        status: DmaMasterStatus,
+        transfer: DmaTransferType,
+        channels: Vec<u8>,
+    ) -> Self {
+        Self {
+            speed,
+            status,
+            transfer,
+            channels,
+        }
+    }
+}
+
+impl Aml for Dma {
+    fn to_aml_bytes(&self, sink: &mut dyn AmlSink) {
+        let channel_mask = self
+            .channels
+            .iter()
+            .fold(0, |mask, channel| mask | 1 << channel);
+
+        let config = (self.speed as u8) << 5 | (self.status as u8) << 2 | self.transfer as u8;
+
+        sink.byte(DMADESC); /* DMA Descriptor */
+        sink.byte(channel_mask);
+        sink.byte(config);
     }
 }
 
@@ -2223,6 +2284,19 @@ mod tests {
         aml.clear();
         "ACPI".to_owned().to_aml_bytes(&mut aml);
         assert_eq!(aml, [0x0d, b'A', b'C', b'P', b'I', 0]);
+    }
+
+    #[test]
+    fn test_dma() {
+        let mut aml = Vec::new();
+        Dma::new(
+            DmaChannelSpeed::TypeB,
+            DmaMasterStatus::Master,
+            DmaTransferType::Transfer16,
+            vec![0, 3, 7],
+        )
+        .to_aml_bytes(&mut aml);
+        assert_eq!(aml, [0x2a, 0b10001001, 0b01000110]);
     }
 
     #[test]
