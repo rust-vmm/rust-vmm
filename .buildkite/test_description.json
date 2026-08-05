@@ -12,25 +12,25 @@
     },
     {
       "test_name": "unittests-gnu",
-      "command": "cd {crate_path} && cargo all-features test",
+      "command": "cd {crate_path} && cargo test --all-features",
       "platform": ["x86_64", "aarch64"],
       "docker_plugin": {"privileged": true}
     },
     {
       "test_name": "unittests-musl",
-      "command": "cd {crate_path} && cargo all-features test --target {target_platform}-unknown-linux-musl",
+      "command": "cd {crate_path} && cargo test --all-features --target {target_platform}-unknown-linux-musl",
       "platform": ["x86_64", "aarch64"],
       "docker_plugin": {"privileged": true}
     },
     {
       "test_name": "unittests-gnu-release",
-      "command": "cd {crate_path} && cargo all-features test --release",
+      "command": "cd {crate_path} && cargo test --all-features --release",
       "platform": ["x86_64", "aarch64"],
       "docker_plugin": {"privileged": true}
     },
     {
       "test_name": "unittests-musl-release",
-      "command": "cd {crate_path} && cargo all-features test --release --target {target_platform}-unknown-linux-musl",
+      "command": "cd {crate_path} && cargo test --all-features --release --target {target_platform}-unknown-linux-musl",
       "platform": ["x86_64", "aarch64"],
       "docker_plugin": {"privileged": true}
     },
