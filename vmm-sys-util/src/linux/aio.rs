@@ -1,7 +1,7 @@
 // Copyright (C) 2019 Alibaba Cloud Computing. All rights reserved.
 // SPDX-License-Identifier: BSD-3-Clause
 
-//! Safe wrapper over [`Linux AIO`](http://man7.org/linux/man-pages/man7/aio.7.html).
+//! Wrapper over [`Linux AIO`](http://man7.org/linux/man-pages/man7/aio.7.html).
 
 #![allow(non_camel_case_types)]
 
@@ -106,26 +106,35 @@ impl IoContext {
     /// # Arguments
     /// * `iocbs`: array of AIO control blocks, which will be submitted to the context.
     ///
+    /// # Safety
+    /// The caller must ensure that every buffer referenced by `iocbs` remains valid until the
+    /// kernel signals the operation is done via a completion. Read ops need exclusive ownership and
+    /// Write ops need shared ownership for the duration of the op.
+    ///
     /// # Examples
     /// ```
+    /// use std::mem::MaybeUninit;
     /// use vmm_sys_util::aio::*;
     /// # use std::fs::File;
     /// # use std::os::unix::io::AsRawFd;
     ///
     /// let file = File::open("/dev/zero").unwrap();
     /// let ctx = IoContext::new(128).unwrap();
-    /// let mut buf: [u8; 4096] = unsafe { std::mem::uninitialized() };
+    /// const BUF_LEN: usize = 4096;
+    /// let mut buf = MaybeUninit::<[u8; BUF_LEN]>::uninit();
     /// let iocbs = [&mut IoControlBlock {
     ///     aio_fildes: file.as_raw_fd() as u32,
     ///     aio_lio_opcode: IOCB_CMD_PREAD as u16,
-    ///     aio_buf: buf.as_mut_ptr() as u64,
-    ///     aio_nbytes: buf.len() as u64,
+    ///     aio_buf: buf.as_mut_ptr() as *mut u8 as u64,
+    ///     aio_nbytes: BUF_LEN as u64,
     ///     ..Default::default()
     /// }];
-    /// assert_eq!(ctx.submit(&iocbs[..]).unwrap(), 1);
+    /// // SAFETY: The buffer is kept alive and exclusively owned until the operation is complete.
+    /// assert_eq!(unsafe { ctx.submit(&iocbs[..]) }.unwrap(), 1);
     /// ```
-    pub fn submit(&self, iocbs: &[&mut IoControlBlock]) -> Result<usize> {
-        // SAFETY: It's safe because parameters are valid and we have checked the result.
+    pub unsafe fn submit(&self, iocbs: &[&mut IoControlBlock]) -> Result<usize> {
+        // SAFETY: The caller guarantees that the referenced memory remains valid until the kernel
+        // completes the operations.
         let rc = unsafe {
             libc::syscall(
                 libc::SYS_io_submit,
@@ -180,32 +189,36 @@ impl IoContext {
     /// # Examples
     ///
     /// ```
+    /// use std::mem::MaybeUninit;
     /// use vmm_sys_util::aio::*;
     /// # use std::fs::File;
     /// # use std::os::unix::io::AsRawFd;
     ///
     /// let file = File::open("/dev/zero").unwrap();
     /// let ctx = IoContext::new(128).unwrap();
-    /// let mut buf: [u8; 4096] = unsafe { std::mem::uninitialized() };
+    /// const BUF_LEN: usize = 4096;
+    /// let mut buf1 = MaybeUninit::<[u8; BUF_LEN]>::uninit();
+    /// let mut buf2 = MaybeUninit::<[u8; BUF_LEN]>::uninit();
     /// let iocbs = [
     ///     &mut IoControlBlock {
     ///         aio_fildes: file.as_raw_fd() as u32,
     ///         aio_lio_opcode: IOCB_CMD_PREAD as u16,
-    ///         aio_buf: buf.as_mut_ptr() as u64,
-    ///         aio_nbytes: buf.len() as u64,
+    ///         aio_buf: buf1.as_mut_ptr() as *mut u8 as u64,
+    ///         aio_nbytes: BUF_LEN as u64,
     ///         ..Default::default()
     ///     },
     ///     &mut IoControlBlock {
     ///         aio_fildes: file.as_raw_fd() as u32,
     ///         aio_lio_opcode: IOCB_CMD_PREAD as u16,
-    ///         aio_buf: buf.as_mut_ptr() as u64,
-    ///         aio_nbytes: buf.len() as u64,
+    ///         aio_buf: buf2.as_mut_ptr() as *mut u8 as u64,
+    ///         aio_nbytes: BUF_LEN as u64,
     ///         ..Default::default()
     ///     },
     /// ];
     ///
-    /// let mut rc = ctx.submit(&iocbs[..]).unwrap();
-    /// let mut events = [unsafe { std::mem::uninitialized::<IoEvent>() }];
+    /// // SAFETY: The referenced buffers live until both operations are complete.
+    /// let mut rc = unsafe { ctx.submit(&iocbs[..]) }.unwrap();
+    /// let mut events = [IoEvent::default()];
     /// rc = ctx.get_events(1, &mut events, None).unwrap();
     /// assert_eq!(rc, 1);
     /// assert!(events[0].res > 0);
@@ -277,7 +290,8 @@ mod test {
             ..Default::default()
         }];
 
-        let mut rc = ctx.submit(&iocbs).unwrap();
+        // SAFETY: The referenced buffer lives until the operation is complete.
+        let mut rc = unsafe { ctx.submit(&iocbs) }.unwrap();
         assert_eq!(rc, 1);
 
         let mut result = Default::default();
@@ -299,25 +313,27 @@ mod test {
         let file = File::open("/dev/zero").unwrap();
 
         let ctx = IoContext::new(128).unwrap();
-        let mut buf: [u8; 4096] = [0u8; 4096];
+        let mut buf1: [u8; 4096] = [0u8; 4096];
+        let mut buf2: [u8; 4096] = [0u8; 4096];
         let iocbs = [
             &mut IoControlBlock {
                 aio_fildes: file.as_raw_fd() as u32,
                 aio_lio_opcode: IOCB_CMD_PREAD as u16,
-                aio_buf: buf.as_mut_ptr() as u64,
-                aio_nbytes: buf.len() as u64,
+                aio_buf: buf1.as_mut_ptr() as u64,
+                aio_nbytes: buf1.len() as u64,
                 ..Default::default()
             },
             &mut IoControlBlock {
                 aio_fildes: file.as_raw_fd() as u32,
                 aio_lio_opcode: IOCB_CMD_PREAD as u16,
-                aio_buf: buf.as_mut_ptr() as u64,
-                aio_nbytes: buf.len() as u64,
+                aio_buf: buf2.as_mut_ptr() as u64,
+                aio_nbytes: buf2.len() as u64,
                 ..Default::default()
             },
         ];
 
-        let mut rc = ctx.submit(&iocbs[..]).unwrap();
+        // SAFETY: The referenced buffers live until both operations are complete.
+        let mut rc = unsafe { ctx.submit(&iocbs[..]) }.unwrap();
         assert_eq!(rc, 2);
 
         let mut events = [IoEvent::default()];
