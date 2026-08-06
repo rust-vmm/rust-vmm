@@ -35,12 +35,11 @@ The `vm-memory` is derived from two upstream projects:
 The high level abstraction of the VM memory has been heavily refactored to
 provide a VMM agnostic interface.
 
-The `vm-memory` crate could be divided into four logic parts as:
+The `vm-memory` crate could be divided into three logic parts as:
 
 - [Abstraction of Address Space](#abstraction-of-address-space)
 - [Specialization for Virtual Machine Physical Address Space](#specialization-for-virtual-machine-physical-address-space)
 - [Backend Implementation Based on `mmap`](#backend-implementation-based-on-mmap)
-- [Utilities and helpers](#utilities-and-helpers)
 
 ### Address Space Abstraction
 
@@ -145,20 +144,6 @@ compiled with the `iommu` feature.  `IommuMemory` uses an `Iommu`
 object to translate I/O virtual addresses (IOVAs) into VMM user addresses
 (VUAs), which are then passed to the inner `GuestMemoryBackend`
 implementation (like `GuestMemoryMmap`).
-
-### Utilities and Helpers
-
-The following utilities and helper traits/macros are imported from the
-[crosvm project](https://chromium.googlesource.com/chromiumos/platform/crosvm/)
-with minor changes:
-
-- `ByteValued` (originally `DataInit`): types which are safe to be initialized
-  from raw data. A type `T` is `ByteValued` if and only if it can be
-  initialized by reading its contents from a byte array. This is generally true
-  for all plain-old-data structs.  It is notably not true for any type that
-  includes a reference.
-- `{Le,Be}_{16,32,64}`: explicit endian types useful for embedding in structs
-  or reinterpreting data.
 
 ## Relationships between Traits, Structs and Types
 
