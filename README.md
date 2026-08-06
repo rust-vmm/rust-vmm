@@ -40,3 +40,4 @@ rust-vmm crates in the root organization [rust-vmm](https://github.com/rust-vmm)
   components.
 - [vm-memory](vm-memory): Virtual machine's guest memory crate.
 - [linux-loader](linux-loader): Linux kernel image loading crate.
+- [event-manager](event-manager): Abstractions for implementing event based systems.

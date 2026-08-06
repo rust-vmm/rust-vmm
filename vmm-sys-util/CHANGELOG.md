@@ -6,6 +6,12 @@
 
 - [[#254](https://github.com/rust-vmm/vmm-sys-util/pull/254)]: Support `TFD_NONBLOCK` for `timerfd::TimerFd`.
 
+### Changed
+
+- [[#25](https://github.com/rust-vmm/vmm-sys-util/issues/25)]: Mark
+  `linux::aio::IoContext::submit` as unsafe to reflect that callers must uphold
+  the safety requirements for submitted buffers.
+
 ## v0.15.0
 
 ### Added

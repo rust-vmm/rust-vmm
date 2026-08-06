@@ -33,7 +33,7 @@ pub enum ControlOperation {
 
 bitflags! {
     /// The type of events we can monitor a file descriptor for.
-    #[derive(Debug, PartialEq)]
+    #[derive(Debug, PartialEq, Copy, Clone)]
     pub struct EventSet: u32 {
         /// The associated file descriptor is available for read operations.
         const IN = EPOLLIN as u32;

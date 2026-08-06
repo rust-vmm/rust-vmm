@@ -1519,12 +1519,13 @@ mod tests {
         let mut a = [0u8; 3];
         let a_ref = VolatileSlice::from(&mut a[..]);
         unsafe {
-            assert!(
-                a_ref.aligned_as_ref::<u16>(0).is_err() ^ a_ref.aligned_as_ref::<u16>(1).is_err()
-            );
-            assert!(
-                a_ref.aligned_as_mut::<u16>(0).is_err() ^ a_ref.aligned_as_mut::<u16>(1).is_err()
-            );
+            let result0 = a_ref.aligned_as_ref::<u16>(0);
+            let result1 = a_ref.aligned_as_ref::<u16>(1);
+            assert_matches!((result0, result1), (Ok(_), Err(_)) | (Err(_), Ok(_)));
+
+            let result0 = a_ref.aligned_as_mut::<u16>(0);
+            let result1 = a_ref.aligned_as_mut::<u16>(1);
+            assert_matches!((result0, result1), (Ok(_), Err(_)) | (Err(_), Ok(_)));
         }
     }
 
@@ -1988,9 +1989,8 @@ mod tests {
             .unwrap();
 
         let mut f = TempFile::new().unwrap().into_file();
-        assert!(f
-            .read_exact_volatile(&mut s.get_slice(1, size_of::<u32>()).unwrap())
-            .is_err());
+        f.read_exact_volatile(&mut s.get_slice(1, size_of::<u32>()).unwrap())
+            .unwrap_err();
 
         let value = s.read_obj::<u32>(1).unwrap();
         if cfg!(target_family = "unix") {
