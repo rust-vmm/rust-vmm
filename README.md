@@ -40,3 +40,4 @@ rust-vmm crates in the root organization [rust-vmm](https://github.com/rust-vmm)
   components.
 - [vm-memory](vm-memory): Virtual machine's guest memory crate.
 - [event-manager](event-manager): Abstractions for implementing event based systems.
+- [seccompiler](seccompiler): Provides easy-to-use seccomp-bpf jailing.
