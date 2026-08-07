@@ -15,6 +15,15 @@
       ],
       "if_changed": "vm-memory/*",
       "crate_path": "vm-memory"
+    },
+    {
+      "test_name": "test-xen",
+      "command": "cd {crate_path} && RUSTFLAGS=\"-D warnings\" cargo test --features backend-bitmap,xen",
+      "platform": [
+        "x86_64"
+      ],
+      "if_changed": "vm-memory/*",
+      "crate_path": "vm-memory"
     }
   ]
 }
