@@ -1,0 +1,13 @@
+{
+    "tests": [
+        {
+            "test_name": "validate-syscall-tables",
+            "command": "cd {crate_path} && tools/generate_syscall_tables.sh --test",
+            "platform": [
+                "x86_64"
+            ],
+            "if_changed": "seccompiler/*",
+            "crate_path": "seccompiler"
+        }
+    ]
+}

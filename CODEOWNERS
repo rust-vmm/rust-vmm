@@ -1,4 +1,5 @@
 /acpi_tables/ @jiangliu @liuw @rbradford @sboeuf
 /event-manager/ @alexandruag @andreeaflorescu @roypat @ShadowCurse
+/seccompiler/ @alindima @petreeftime
 /vmm-sys-util/ @andreeaflorescu @ShadowCurse
 /vm-memory/ @alexandruag @bonzini @jiangliu @tkreuzer @roypat @ShadowCurse @XanClic
