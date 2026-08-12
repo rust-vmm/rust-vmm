@@ -6,6 +6,12 @@
 
 ## Fixed
 
+- [[#149](https://github.com/rust-vmm/rust-vmm/pull/149/)]: Account for the ring
+  element size when computing `SplitQueueRing` addresses. `MockSplitQueue` no
+  longer places the used ring inside the available ring, and the used ring's
+  event suppression field is now located after its ring elements. Note that the
+  ring addresses returned by `MockSplitQueue` have changed.
+
 # v0.18.0
 
 ## Added
