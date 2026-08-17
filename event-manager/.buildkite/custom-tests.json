@@ -2,7 +2,7 @@
     "tests": [
         {
             "test_name": "performance",
-            "command": "ROOT=$$PWD && cd {crate_path} && pytest -s $(find \"$$ROOT\" -path \"*/integration_tests/test_benchmark.py\")",
+            "command": "ROOT=$$PWD && cd {crate_path} && PACKAGE=event-manager pytest -s $(find \"$$ROOT\" -path \"*/integration_tests/test_benchmark.py\")",
             "platform": [
                 "x86_64",
                 "aarch64"

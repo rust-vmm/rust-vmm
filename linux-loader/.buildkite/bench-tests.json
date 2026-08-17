@@ -1,0 +1,15 @@
+{
+    "tests": [
+        {
+            "test_name": "bench",
+            "command": "PACKAGE=linux-loader pytest rust-vmm-ci/integration_tests/test_benchmark.py -s",
+            "platform": [
+                "x86_64",
+                "aarch64"
+            ],
+            "timeout_in_minutes": 15,
+            "if_changed": "linux-loader/*",
+            "crate_path": "linux-loader"
+        }
+    ]
+}

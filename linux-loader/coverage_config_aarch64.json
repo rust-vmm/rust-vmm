@@ -1,0 +1,5 @@
+{
+  "coverage_score": 90.42,
+  "crate_features": "pe",
+  "exclude_path": "benches/"
+}

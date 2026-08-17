@@ -1,5 +1,5 @@
 {
-  "coverage_score": 84.00,
+  "coverage_score": 84.71,
   "exclude_path": "utilities/",
   "crate_features": "remote_endpoint,test_utilities"
 }
