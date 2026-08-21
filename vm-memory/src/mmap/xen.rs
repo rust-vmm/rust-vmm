@@ -69,9 +69,9 @@ pub enum Error {
 
 type Result<T> = result::Result<T, Error>;
 
-/// `MmapRange` represents a range of arguments required to create Mmap regions.
+/// `MmapRangeXen` represents a range of arguments required to create Mmap regions.
 #[derive(Clone, Debug)]
-pub struct MmapRange {
+pub struct MmapRangeXen {
     size: usize,
     file_offset: Option<FileOffset>,
     prot: Option<i32>,
@@ -82,7 +82,7 @@ pub struct MmapRange {
     mmap_data: u32,
 }
 
-impl MmapRange {
+impl MmapRangeXen {
     /// Creates instance of the range with multiple arguments.
     pub fn new(
         size: usize,
@@ -220,7 +220,7 @@ impl<B: NewBitmap> MmapRegion<B> {
     /// Creates a shared anonymous mapping of `size` bytes.
     ///
     /// # Arguments
-    /// * `range` - An instance of type `MmapRange`.
+    /// * `range` - An instance of type `MmapRangeXen`.
     ///
     /// # Examples
     /// * Write a slice at guest address 0x1200 with Xen's Grant mapping.
@@ -241,10 +241,10 @@ impl<B: NewBitmap> MmapRegion<B> {
     ///     0,
     /// ));
     ///
-    /// let range = MmapRange::new(0x400, file, addr, MmapXenFlags::GRANT.bits(), 0);
+    /// let range = MmapRangeXen::new(0x400, file, addr, MmapXenFlags::GRANT.bits(), 0);
     /// # }
     /// # // We need a UNIX mapping for tests to succeed.
-    /// # let range = MmapRange::new_unix(0x400, None, addr);
+    /// # let range = MmapRangeXen::new_unix(0x400, None, addr);
     ///
     /// let r = MmapRegionXen::<()>::from_range(range).expect("Could not create mmap region");
     ///
@@ -286,7 +286,7 @@ impl<B: NewBitmap> MmapRegion<B> {
     ///     .expect("Could not write to guest memory");
     /// assert_eq!(5, res);
     /// ```
-    pub fn from_range(mut range: MmapRange) -> Result<Self> {
+    pub fn from_range(mut range: MmapRangeXen) -> Result<Self> {
         if range.prot.is_none() {
             range.prot = Some(libc::PROT_READ | libc::PROT_WRITE);
         }
@@ -489,7 +489,7 @@ impl<B: NewBitmap> GuestRegionMmap<B> {
         size: usize,
         file: Option<FileOffset>,
     ) -> result::Result<Self, FromRangesError> {
-        let range = MmapRange::new_unix(size, file, addr);
+        let range = MmapRangeXen::new_unix(size, file, addr);
 
         let region = MmapRegion::from_range(range)?;
         Self::new(region, addr).ok_or(FromRangesError::InvalidGuestRegion)
@@ -729,7 +729,7 @@ trait MmapXenTrait: std::fmt::Debug {
 struct MmapXenUnix(MmapUnix, GuestAddress);
 
 impl MmapXenUnix {
-    fn new(range: &MmapRange) -> Result<Self> {
+    fn new(range: &MmapRangeXen) -> Result<Self> {
         let (fd, offset) = if let Some(ref f_off) = range.file_offset {
             (f_off.file().as_raw_fd(), f_off.start())
         } else {
@@ -810,7 +810,7 @@ impl AsRawFd for MmapXenForeign {
 }
 
 impl MmapXenForeign {
-    fn new(range: &MmapRange) -> Result<Self> {
+    fn new(range: &MmapRangeXen) -> Result<Self> {
         let (fd, f_offset) = validate_file(&range.file_offset)?;
         let (count, size) = pages(range.size);
 
@@ -1023,7 +1023,7 @@ impl AsRawFd for MmapXenGrant {
 }
 
 impl MmapXenGrant {
-    fn new(range: &MmapRange, mmap_flags: MmapXenFlags) -> Result<Self> {
+    fn new(range: &MmapRangeXen, mmap_flags: MmapXenFlags) -> Result<Self> {
         validate_file(&range.file_offset)?;
 
         let mut grant = Self {
@@ -1192,7 +1192,7 @@ pub struct MmapXen {
 }
 
 impl MmapXen {
-    fn new(range: &MmapRange) -> Result<Self> {
+    fn new(range: &MmapRangeXen) -> Result<Self> {
         let xen_flags = match MmapXenFlags::from_bits(range.mmap_flags) {
             Some(flags) => flags,
             None => return Err(Error::MmapFlags(range.mmap_flags)),
@@ -1268,7 +1268,7 @@ mod tests {
         0
     }
 
-    impl MmapRange {
+    impl MmapRangeXen {
         fn initialized(is_file: bool) -> Self {
             let file_offset = if is_file {
                 Some(FileOffset::new(TempFile::new().unwrap().into_file(), 0))
@@ -1276,7 +1276,7 @@ mod tests {
                 None
             };
 
-            let mut range = MmapRange::new_unix(0x1000, file_offset, GuestAddress(0x1000));
+            let mut range = MmapRangeXen::new_unix(0x1000, file_offset, GuestAddress(0x1000));
             range.prot = Some(libc::PROT_READ | libc::PROT_WRITE);
             range.mmap_data = 1;
 
@@ -1287,14 +1287,14 @@ mod tests {
     impl MmapRegion {
         /// Create an `MmapRegion` with specified `size` at GuestAdress(0)
         pub fn new(size: usize) -> Result<Self> {
-            let range = MmapRange::new_unix(size, None, GuestAddress(0));
+            let range = MmapRangeXen::new_unix(size, None, GuestAddress(0));
             Self::from_range(range)
         }
     }
 
     #[test]
     fn test_mmap_xen_failures() {
-        let mut range = MmapRange::initialized(true);
+        let mut range = MmapRangeXen::initialized(true);
         // Invalid flags
         range.mmap_flags = 16;
 
@@ -1312,7 +1312,7 @@ mod tests {
 
     #[test]
     fn test_mmap_xen_success() {
-        let mut range = MmapRange::initialized(true);
+        let mut range = MmapRangeXen::initialized(true);
         range.mmap_flags = MmapXenFlags::FOREIGN.bits();
 
         let r = MmapXen::new(&range).unwrap();
@@ -1338,23 +1338,23 @@ mod tests {
 
     #[test]
     fn test_foreign_map_failure() {
-        let mut range = MmapRange::initialized(true);
+        let mut range = MmapRangeXen::initialized(true);
         range.file_offset = Some(FileOffset::new(TempFile::new().unwrap().into_file(), 0));
         range.prot = None;
         let r = MmapXenForeign::new(&range);
         assert_matches!(r.unwrap_err(), Error::UnexpectedError);
 
-        let mut range = MmapRange::initialized(true);
+        let mut range = MmapRangeXen::initialized(true);
         range.flags = None;
         let r = MmapXenForeign::new(&range);
         assert_matches!(r.unwrap_err(), Error::UnexpectedError);
 
-        let mut range = MmapRange::initialized(true);
+        let mut range = MmapRangeXen::initialized(true);
         range.file_offset = Some(FileOffset::new(TempFile::new().unwrap().into_file(), 1));
         let r = MmapXenForeign::new(&range);
         assert_matches!(r.unwrap_err(), Error::InvalidOffsetLength);
 
-        let mut range = MmapRange::initialized(true);
+        let mut range = MmapRangeXen::initialized(true);
         range.size = 0;
         let r = MmapXenForeign::new(&range);
         assert_eq!(r.unwrap_err().raw_os_error(), libc::EINVAL);
@@ -1362,7 +1362,7 @@ mod tests {
 
     #[test]
     fn test_foreign_map_success() {
-        let range = MmapRange::initialized(true);
+        let range = MmapRangeXen::initialized(true);
         let r = MmapXenForeign::new(&range).unwrap();
         assert_ne!(r.addr(), null_mut());
         assert_eq!(r.domid, range.mmap_data);
@@ -1371,27 +1371,27 @@ mod tests {
 
     #[test]
     fn test_grant_map_failure() {
-        let mut range = MmapRange::initialized(true);
+        let mut range = MmapRangeXen::initialized(true);
         range.prot = None;
         let r = MmapXenGrant::new(&range, MmapXenFlags::empty());
         assert_matches!(r.unwrap_err(), Error::UnexpectedError);
 
-        let mut range = MmapRange::initialized(true);
+        let mut range = MmapRangeXen::initialized(true);
         range.prot = None;
         // Protection isn't used for no-advance mappings
         MmapXenGrant::new(&range, MmapXenFlags::NO_ADVANCE_MAP).unwrap();
 
-        let mut range = MmapRange::initialized(true);
+        let mut range = MmapRangeXen::initialized(true);
         range.flags = None;
         let r = MmapXenGrant::new(&range, MmapXenFlags::NO_ADVANCE_MAP);
         assert_matches!(r.unwrap_err(), Error::UnexpectedError);
 
-        let mut range = MmapRange::initialized(true);
+        let mut range = MmapRangeXen::initialized(true);
         range.file_offset = Some(FileOffset::new(TempFile::new().unwrap().into_file(), 1));
         let r = MmapXenGrant::new(&range, MmapXenFlags::NO_ADVANCE_MAP);
         assert_matches!(r.unwrap_err(), Error::InvalidOffsetLength);
 
-        let mut range = MmapRange::initialized(true);
+        let mut range = MmapRangeXen::initialized(true);
         range.size = 0;
         let r = MmapXenGrant::new(&range, MmapXenFlags::empty());
         assert_eq!(r.unwrap_err().raw_os_error(), libc::EINVAL);
@@ -1399,18 +1399,18 @@ mod tests {
 
     #[test]
     fn test_grant_map_success() {
-        let range = MmapRange::initialized(true);
+        let range = MmapRangeXen::initialized(true);
         let r = MmapXenGrant::new(&range, MmapXenFlags::NO_ADVANCE_MAP).unwrap();
         assert_eq!(r.addr(), null_mut());
         assert_eq!(r.domid, range.mmap_data);
         assert_eq!(r.guest_base, range.addr);
 
-        let mut range = MmapRange::initialized(true);
+        let mut range = MmapRangeXen::initialized(true);
         // Size isn't used with no-advance mapping.
         range.size = 0;
         MmapXenGrant::new(&range, MmapXenFlags::NO_ADVANCE_MAP).unwrap();
 
-        let range = MmapRange::initialized(true);
+        let range = MmapRangeXen::initialized(true);
         let r = MmapXenGrant::new(&range, MmapXenFlags::empty()).unwrap();
         assert_ne!(r.addr(), null_mut());
         assert_eq!(r.domid, range.mmap_data);

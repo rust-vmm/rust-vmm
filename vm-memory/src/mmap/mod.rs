@@ -30,7 +30,7 @@ pub use unix::{Error as MmapRegionError, MmapRegion, MmapRegionBuilder};
 #[cfg(all(feature = "xen", target_family = "unix"))]
 pub use xen::{
     Error as MmapRegionErrorXen, GuestMemoryMmap, GuestMemoryXen,
-    GuestRegionMmap as GuestRegionMmapXen, MmapRange as MmapRangeXen, MmapRegion as MmapRegionXen,
+    GuestRegionMmap as GuestRegionMmapXen, MmapRangeXen, MmapRegion as MmapRegionXen,
     MmapXenFlags,
 };
 
