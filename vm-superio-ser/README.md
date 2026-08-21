@@ -9,10 +9,8 @@ an
 [ARM PL031 Real Time Clock](https://developer.arm.com/documentation/ddi0224/c/Programmers-model).
 To enable snapshot use cases, such as live migration, it also provides support
 for saving and restoring the state, and for persisting it.
-In order to achieve this, and to keep a clear separation of concerns,
-`vm-superio` is a
-[workspace](https://doc.rust-lang.org/book/ch14-03-cargo-workspaces.html),
-containing the following crates:
+In order to achieve this, and to keep a clear separation of concerns, that
+support is split in two crates:
 - `vm-superio` - which keeps the state of the component;
 - `vm-superio-ser` - which mirrors the state structure from `vm-superio` and
    adds the required version constraints on it, and derives/implements the
@@ -38,7 +36,7 @@ covered in this crate, the VMM needs to do the following operations:
 - event handling (optional)
 
 The following UART registers are emulated via the
-[`Serial` structure](./vm-superio/src/serial.rs): DLL, IER, DLH, IIR, LCR,
+[`Serial` structure](../vm-superio/src/serial.rs): DLL, IER, DLH, IIR, LCR,
 LSR, MCR, MSR and SR (a brief, but nice presentation about these,
 [here](https://www.lammertbies.nl/comm/info/serial-uart#regs)).
 The Fifo Control Register (FCR) is not emulated; there is no support yet for
