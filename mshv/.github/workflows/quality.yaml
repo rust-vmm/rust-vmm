@@ -1,0 +1,38 @@
+name: Mshv Quality Checks
+on: [pull_request, create]
+
+jobs:
+  build:
+    if: github.event_name == 'pull_request'
+    name: Quality (clippy, rustfmt)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          - stable
+        target:
+          - x86_64-unknown-linux-gnu
+    steps:
+      - name: Code checkout
+        uses: actions/checkout@v7
+      - name: Install Rust toolchain (${{ matrix.rust }})
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ matrix.rust }}
+          target: ${{ matrix.target }}
+          components: rustfmt, clippy
+
+      - name: Formatting (rustfmt)
+        run: cargo fmt -- --check
+
+      - name: Clippy (all features)
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Unit Test(mshv-bindings)
+        run: cargo test --workspace --exclude mshv-ioctls  --all-targets
+
+      - name: Lint with flake8
+        run: |
+          pip3 install flake8
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --max-complexity=10 --max-line-length=127 --statistics
