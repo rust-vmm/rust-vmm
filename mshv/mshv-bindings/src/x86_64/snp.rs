@@ -654,7 +654,6 @@ impl Default for hv_sev_vmgexit_port_info {
 ///
 /// Get default VMGEXIT offload features supported by
 /// Microsoft Hypervisor.
-///
 pub fn get_default_vmgexit_offload_features() -> hv_sev_vmgexit_offload {
     let mut offload_feature = hv_sev_vmgexit_offload::default();
 
@@ -679,7 +678,6 @@ pub fn get_default_vmgexit_offload_features() -> hv_sev_vmgexit_offload {
 
 ///
 /// Helper function to parse the GPA range
-///
 pub fn parse_gpa_range(range: hv_gpa_page_range) -> Result<(u64, u64)> {
     let gpa_page_start;
     let gpa_page_count;
@@ -699,7 +697,6 @@ pub fn parse_gpa_range(range: hv_gpa_page_range) -> Result<(u64, u64)> {
 ///
 /// Get default SEV-SNP guest policy supported by
 /// Microsoft Hypervisor.
-///
 pub fn get_default_snp_guest_policy() -> hv_snp_guest_policy {
     let mut snp_policy = hv_snp_guest_policy { as_uint64: 0_u64 };
 
@@ -719,7 +716,6 @@ pub fn get_default_snp_guest_policy() -> hv_snp_guest_policy {
 ///
 /// Helper function to get sev control register
 /// for a given VMSA PFN.
-///
 pub fn get_sev_control_register(vmsa_pfn: u64) -> u64 {
     let mut sev_control = hv_x64_register_sev_control { as_uint64: 0_u64 };
 

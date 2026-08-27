@@ -19,8 +19,8 @@ use std::vec::Vec;
 /// use mshv_bindings::bindings::*;
 /// #[repr(C, packed)]
 /// struct hv_input_foo {
-///    some_field: __u64,
-///    variable_array_field: __IncompleteArrayField<__u64>,
+///     some_field: __u64,
+///     variable_array_field: __IncompleteArrayField<__u64>,
 /// }
 /// ```
 /// The struct cannot be used as-is because it can't store anything in the
@@ -41,7 +41,6 @@ use std::vec::Vec;
 ///
 /// [1] HyperV TLFS describing the hypercall interface and rep hypercalls:
 ///   https://learn.microsoft.com/en-us/virtualization/hyper-v-on-windows/tlfs/hypercall-interface
-///
 pub struct RepInput<T> {
     vec: Vec<T>,
     size: usize,
