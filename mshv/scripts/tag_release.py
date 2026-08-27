@@ -67,7 +67,7 @@ def get_latest_version(crate):
 
 
 def get_crates():
-    root_cargo_toml = Path(__file__).parent.parent / "Cargo.toml"
+    root_cargo_toml = Path(__file__).parent.parent.parent / "Cargo.toml"
     with open(root_cargo_toml, "r") as f:
         content = f.read()
     members_match = re.search(r'members\s*=\s*\[([^\]]+)\]', content)
@@ -76,7 +76,7 @@ def get_crates():
 
     members_str = members_match.group(1)
     members = [m.strip().strip('"').strip("'") for m in members_str.split(",") if m.strip()]
-    return members
+    return [Path(member).name for member in members if Path(member).parts[0] == "mshv"]
 
 
 def main(args):
