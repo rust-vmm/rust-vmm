@@ -71,13 +71,17 @@ Generally follow the guidelines [here](https://github.com/rust-vmm/community/blo
     $ ./mshv/scripts/tag_release.py --crate mshv-bindings
     Created tag: mshv-bindings-v0.6.0
 ```
-4. Check the tags look okay, and push them
+4. Check the tags look okay:
 ```
     git show mshv-ioctls-v0.6.0
     git show mshv-bindings-v0.6.0
-    git push --tags
 ```
-5. Create a release on github, use the generated release notes.
-6. Confirm the release workflows publish both crates to crates.io.
+5. Push the `mshv-bindings` tag and wait for its release workflow to publish
+   the crate before pushing the `mshv-ioctls` tag:
+```
+    git push origin mshv-bindings-v0.6.0
+    git push origin mshv-ioctls-v0.6.0
+```
+6. Create releases on GitHub using the generated release notes.
 7. Bump the mshv version in upstream [vfio](https://github.com/rust-vmm/vfio)
 8. Bump the mshv version in upstream [Cloud Hypervisor](https://github.com/cloud-hypervisor/cloud-hypervisor)
