@@ -6,7 +6,7 @@ edition = "2021"
 license = "Apache-2.0 OR BSD-3-Clause"
 readme = "README.md"
 keywords = ["mshv", "Microsoft", "Hypervisor", "MSHV"]
-repository = "https://github.com/rust-vmm/mshv"
+repository.workspace = true
 description = "Safe wrappers over MSHV ioctl"
 
 [dependencies]
@@ -15,4 +15,4 @@ mshv-bindings = { version = "=0.7.1", path = "../mshv-bindings", features = [
   "fam-wrappers",
 ] }
 thiserror = "2.0"
-vmm-sys-util = ">=0.12.1"
+vmm-sys-util = { version = ">=0.12.1", path = "../../vmm-sys-util" }

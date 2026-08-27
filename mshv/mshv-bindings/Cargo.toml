@@ -6,7 +6,7 @@ edition = "2021"
 license = "Apache-2.0 OR BSD-3-Clause"
 readme = "README.md"
 keywords = ["mshv", "Microsoft", "Hypervisor", "MSHV"]
-repository = "https://github.com/rust-vmm/mshv"
+repository.workspace = true
 description = "Rust FFI bindings to MSHV headers generated using Rust bindgen"
 
 [features]
@@ -18,7 +18,7 @@ libc = ">=0.2.39"
 num_enum = { version = "0.7", default-features = false }
 serde = { version = ">=1.0.27", optional = true }
 serde_derive = { version = ">=1.0.27", optional = true }
-vmm-sys-util = ">=0.12.1"
+vmm-sys-util = { version = ">=0.12.1", path = "../../vmm-sys-util" }
 zerocopy = { version = "0.8", features = ["derive"] }
 
 [dev-dependencies]

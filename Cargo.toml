@@ -6,6 +6,8 @@ members = [
   "acpi_tables",
   "event-manager",
   "linux-loader",
+  "mshv/mshv-bindings",
+  "mshv/mshv-ioctls",
   "seccompiler",
   "vm-allocator",
   "vm-memory",
