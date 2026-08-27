@@ -158,7 +158,7 @@ impl KernelLoader for PE {
             .map_err(|_| Error::ReadImageHeader)?;
 
         #[cfg(target_arch = "aarch64")]
-        if u32::from_le(image_header.magic) != 0x644d_5241 {
+        if u32::from_le(image_header.magic) != u32::from_le_bytes(*b"ARM\x64") {
             return Err(Error::InvalidImageMagicNumber.into());
         }
         #[cfg(target_arch = "riscv64")]
