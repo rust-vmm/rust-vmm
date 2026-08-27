@@ -1,6 +1,7 @@
 /acpi_tables/ @jiangliu @liuw @rbradford @sboeuf
 /event-manager/ @alexandruag @andreeaflorescu @roypat @ShadowCurse
 /linux-loader/ @aghecenco @sameo @rbradford @roypat @andreitraistaru @ShadowCurse
+/mshv/ @anirudhrb @gamora12 @liuw @praveen-pk @russell-islam @weltling
 /seccompiler/ @alindima @petreeftime
 /vm-allocator/ @AlexandruCihodaru @alsrdn @jiangliu @andreeaflorescu @gsserge @studychao @roypat @ShadowCurse
 /vmm-sys-util/ @andreeaflorescu @ShadowCurse
