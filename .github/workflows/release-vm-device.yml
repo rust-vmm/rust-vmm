@@ -1,0 +1,18 @@
+name: Publish vm-device to crates.io
+
+on:
+  push:
+    tags: ['vm-device-v*']  # Triggers when pushing tags starting with 'vm-device-v'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write     # Required for OIDC token exchange
+    steps:
+    - uses: actions/checkout@v4
+    - uses: rust-lang/crates-io-auth-action@v1
+      id: auth
+    - run: cargo publish --package vm-device
+      env:
+        CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}

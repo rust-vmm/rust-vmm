@@ -38,6 +38,7 @@ rust-vmm crates in the root organization [rust-vmm](https://github.com/rust-vmm)
   static ACPI tables.
 - [event-manager](event-manager): Abstractions for implementing event based systems.
 - [linux-loader](linux-loader): Linux kernel image loading crate.
+- [vm-device](vm-device): Management for virtual devices and resources.
 - [vm-allocator](vm-allocator): Allocation and release strategies for the
   resources a VMM needs, such as MMIO/PIO addresses, GSI numbers and device IDs.
 - [vmm-sys-util](vmm-sys-util): Helpers and utilities used by multiple rust-vmm

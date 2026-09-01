@@ -1,0 +1,11 @@
+[package]
+name = "vm-device"
+version = "0.1.0"
+authors = ["Samuel Ortiz <sameo@linux.intel.com>", "Liu Jiang <gerry@linux.alibaba.com>", "rust-vmm AWS maintainers <rust-vmm-maintainers@amazon.com>"]
+description = "management for virtual devices and resources"
+keywords = ["bus", "manager", "virtualization"]
+edition = "2018"
+repository = "https://github.com/rust-vmm/rust-vmm"
+license = "Apache-2.0 OR BSD-3-Clause"
+
+[dependencies]
