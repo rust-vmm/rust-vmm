@@ -25,7 +25,9 @@ pe = ["elf"]
 elf = []
 
 [dependencies]
-vm-memory = { path = "../vm-memory", version = "0.18" }
+# We disable the default features for vm-memory since otherwise it would enable "rawfd",
+# which isn't supported on Windows (leading to a build-time failure) and we don't use it.
+vm-memory = { path = "../vm-memory", version = "0.18", default-features = false }
 
 [dev-dependencies]
 criterion = { version = "0.7.0", features = ["html_reports"] }
