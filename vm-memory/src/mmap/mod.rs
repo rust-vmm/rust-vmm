@@ -41,7 +41,9 @@ mod windows;
 pub use unix::{Error as MmapRegionError, MmapRegion, MmapRegionBuilder};
 
 #[cfg(all(feature = "xen", target_family = "unix"))]
-pub use xen::{Error as MmapRegionError, MmapRange, MmapRegion, MmapXenFlags};
+pub use xen::{
+    Error as MmapRegionError, GrantDmaBuf as SharedOsHandle, MmapRange, MmapRegion, MmapXenFlags,
+};
 
 #[cfg(target_family = "windows")]
 pub use std::io::Error as MmapRegionError;
@@ -186,6 +188,47 @@ impl<B: Bitmap> GuestMemoryRegionBytes for GuestRegionMmap<B> {}
 /// Each region is an instance of `GuestRegionMmap`, being backed by a mapping in the
 /// virtual address space of the calling process.
 pub type GuestMemoryMmap<B = ()> = GuestRegionCollection<GuestRegionMmap<B>>;
+
+#[cfg(all(feature = "xen", target_family = "unix"))]
+/// An extension for `GuestMemoryMmap` providing a way to share handles to guest memory.
+pub trait GuestMemoryExportExt {
+    /// Creates a shareable OS-level handle (such as a DMA-BUF) for a given subset
+    /// of the address space, if supported.
+    fn get_os_handle(
+        &self,
+        iovecs: &[(GuestAddress, usize)],
+    ) -> guest_memory::Result<SharedOsHandle>;
+}
+
+#[cfg(all(feature = "xen", target_family = "unix"))]
+impl<B: Bitmap> GuestMemoryExportExt for GuestMemoryMmap<B> {
+    fn get_os_handle(
+        &self,
+        iovecs: &[(GuestAddress, usize)],
+    ) -> guest_memory::Result<SharedOsHandle> {
+        use guest_memory::GuestMemoryBackend;
+        // On Xen, there's only one region which has different internal type per backend used
+        let addr = iovecs
+            .first()
+            .ok_or_else(|| guest_memory::Error::HostAddressNotAvailable)?
+            .0;
+        self.to_region_addr(addr)
+            .ok_or(guest_memory::Error::InvalidGuestAddress(addr))
+            .and_then(|(r, _addr)| {
+                // TODO: avoid intermediate vec, push into the fam directly from iterating over iovecs
+                let mut page_addrs = Vec::with_capacity(iovecs.len());
+                for (base, len) in iovecs {
+                    // TODO: unhardcode page size.. also verify page alignment
+                    for i in 0..(len / 4096) {
+                        page_addrs.push(base.0 + i as u64 * 4096);
+                    }
+                }
+
+                r.export_dma_buf(page_addrs)
+                    .map_err(guest_memory::Error::GrantExportError)
+            })
+    }
+}
 
 /// Errors that can happen during [`GuestMemoryMmap::from_ranges`] and related functions.
 #[derive(Debug, thiserror::Error)]

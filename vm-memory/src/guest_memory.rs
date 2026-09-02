@@ -91,6 +91,10 @@ pub enum Error {
     /// IOMMU translation error
     #[error("IOMMU failed to translate guest address: {0}")]
     IommuError(IommuError),
+    #[cfg(feature = "xen")]
+    /// Xen grant DMA-BUF export error
+    #[error("Failed to export DMA-BUF: {0}")]
+    GrantExportError(crate::mmap::xen::Error),
 }
 
 impl From<volatile_memory::Error> for Error {
