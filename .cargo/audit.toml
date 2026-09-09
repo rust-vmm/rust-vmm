@@ -1,7 +1,7 @@
 [advisories]
 ignore = [
-    # bincode is an unmaintained dependency introduced by versionize.
-    # Issue reported at https://github.com/firecracker-microvm/versionize/issues/63
-    # While waiting for a solution, let's ignore it since it's just unmaintained.
+    # bincode is unmaintained. Now that versionize is gone, the only thing
+    # pulling it into the workspace is the vm-superio-ser dev-dependency
+    # used by its tests, so it is not part of anything we publish.
     "RUSTSEC-2025-0141",
 ]

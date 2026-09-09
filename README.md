@@ -44,3 +44,7 @@ rust-vmm crates in the root organization [rust-vmm](https://github.com/rust-vmm)
   components.
 - [vm-memory](vm-memory): Virtual machine's guest memory crate.
 - [seccompiler](seccompiler): Provides easy-to-use seccomp-bpf jailing.
+- [vm-superio](vm-superio): Emulation for legacy devices: serial console,
+  i8042 PS/2 controller and ARM PL031 real time clock.
+- [vm-superio-ser](vm-superio-ser): Serialization for the device states of
+  vm-superio.

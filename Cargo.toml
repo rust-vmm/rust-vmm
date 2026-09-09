@@ -9,6 +9,8 @@ members = [
   "seccompiler",
   "vm-allocator",
   "vm-memory",
+  "vm-superio",
+  "vm-superio-ser",
   "vmm-sys-util",
 ]
 resolver = "2"
