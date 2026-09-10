@@ -10,6 +10,8 @@ members = [
   "vm-allocator",
   "vm-memory",
   "vmm-sys-util",
+  "kvm/kvm-bindings",
+  "kvm/kvm-ioctls",
 ]
 resolver = "2"
 

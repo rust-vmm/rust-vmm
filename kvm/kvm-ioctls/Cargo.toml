@@ -1,0 +1,20 @@
+[package]
+name = "kvm-ioctls"
+version = "0.25.0"
+authors = ["Amazon Firecracker Team <firecracker-maintainers@amazon.com>"]
+description = "Safe wrappers over KVM ioctls"
+repository.workspace = true
+readme = "README.md"
+keywords = ["kvm"]
+license = "Apache-2.0 OR MIT"
+edition = "2024"
+rust-version = "1.85"
+
+[dependencies]
+libc = "0.2.39"
+kvm-bindings = { path = "../kvm-bindings", version = "0.14.1", features = ["fam-wrappers"] }
+vmm-sys-util = { path = "../../vmm-sys-util", version = ">=0.14, <=0.15" }
+bitflags = "2.4.1"
+
+[dev-dependencies]
+byteorder = "1.2.1"

@@ -1,0 +1,5 @@
+{
+  "coverage_score": 77.49,
+  "exclude_path": ".*(bindings\\.rs|vmm-sys-util/.*)",
+  "crate_features": "fam-wrappers,serde"
+}

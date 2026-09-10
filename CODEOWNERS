@@ -1,5 +1,6 @@
 /acpi_tables/ @jiangliu @liuw @rbradford @sboeuf
 /event-manager/ @alexandruag @andreeaflorescu @roypat @ShadowCurse
+/kvm/ @acatangiu @aghecenco @andreeaflorescu @lauralt @sameo @roypat @ShadowCurse
 /linux-loader/ @aghecenco @sameo @rbradford @roypat @andreitraistaru @ShadowCurse
 /seccompiler/ @alindima @petreeftime
 /vm-allocator/ @AlexandruCihodaru @alsrdn @jiangliu @andreeaflorescu @gsserge @studychao @roypat @ShadowCurse

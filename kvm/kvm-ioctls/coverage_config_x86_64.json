@@ -1,0 +1,4 @@
+{
+  "coverage_score": 89.48,
+  "exclude_path": ".*(bindings\\.rs|vmm-sys-util/.*)"
+}
