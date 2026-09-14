@@ -16,28 +16,26 @@ use std::path::Path;
 
 use core::hint::black_box;
 use criterion::Criterion;
+use zerocopy::{FromBytes, IntoBytes};
 
-use vm_memory::{ByteValued, Bytes, GuestAddress, GuestMemoryBackend};
+use vm_memory::{Bytes, GuestAddress, GuestMemoryBackend};
 
 const REGION_SIZE: usize = 0x8000_0000;
 const REGIONS_COUNT: u64 = 8;
 const ACCESS_SIZE: usize = 0x200;
 
 #[repr(C)]
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, FromBytes, IntoBytes)]
 struct SmallDummy {
     a: u32,
     b: u32,
 }
-unsafe impl ByteValued for SmallDummy {}
 
 #[repr(C)]
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, FromBytes, IntoBytes)]
 struct BigDummy {
     elements: [u64; 12],
 }
-
-unsafe impl ByteValued for BigDummy {}
 
 fn make_image(size: usize) -> Vec<u8> {
     let mut image: Vec<u8> = Vec::with_capacity(size);

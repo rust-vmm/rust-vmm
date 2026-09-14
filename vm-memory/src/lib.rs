@@ -46,10 +46,7 @@ pub use atomic_integer::AtomicInteger;
 pub mod bitmap;
 
 pub mod bytes;
-pub use bytes::{AtomicAccess, ByteValued, Bytes};
-
-pub mod endian;
-pub use endian::{Be16, Be32, Be64, BeSize, Le16, Le32, Le64, LeSize};
+pub use bytes::{AtomicAccess, Bytes};
 
 pub mod guest_memory;
 pub use guest_memory::{
