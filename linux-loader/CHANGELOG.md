@@ -1,3 +1,9 @@
+# [v0.14.1]
+
+## Changed
+- [[#127](https://github.com/rust-vmm/rust-vmm/pull/127)] Disable vm-memory default features. This allows the
+  crate to be used for Windows targets.
+
 # [v0.14.0]
 
 ## Fixed
