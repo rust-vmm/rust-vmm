@@ -12,6 +12,7 @@ use std::cmp::min;
 use std::fs::File;
 use std::io::{stderr, Cursor, Write};
 use std::marker::PhantomData;
+use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
 use std::ptr::null_mut;
 use std::slice;
@@ -694,6 +695,12 @@ impl<T: PollToken> EpollContext<T> {
     }
 }
 
+impl<T: PollToken> AsFd for EpollContext<T> {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        self.epoll_ctx.as_fd()
+    }
+}
+
 impl<T: PollToken> AsRawFd for EpollContext<T> {
     fn as_raw_fd(&self) -> RawFd {
         self.epoll_ctx.as_raw_fd()
@@ -920,6 +927,12 @@ impl<T: PollToken> PollContext<T> {
     }
 }
 
+impl<T: PollToken> AsFd for PollContext<T> {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        self.epoll_ctx.as_fd()
+    }
+}
+
 impl<T: PollToken> AsRawFd for PollContext<T> {
     fn as_raw_fd(&self) -> RawFd {
         self.epoll_ctx.as_raw_fd()
@@ -938,6 +951,15 @@ mod tests {
     use crate::eventfd::EventFd;
     use std::os::unix::net::UnixStream;
     use std::time::Instant;
+
+    #[test]
+    fn test_as_fd() {
+        let epoll_ctx: EpollContext<u32> = EpollContext::new().unwrap();
+        assert_eq!(epoll_ctx.as_fd().as_raw_fd(), epoll_ctx.as_raw_fd());
+
+        let poll_ctx: PollContext<u32> = PollContext::new().unwrap();
+        assert_eq!(poll_ctx.as_fd().as_raw_fd(), poll_ctx.as_raw_fd());
+    }
 
     #[test]
     fn test_poll_context() {

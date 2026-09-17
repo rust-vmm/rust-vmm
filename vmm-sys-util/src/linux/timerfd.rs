@@ -10,6 +10,7 @@
 use std::fs::File;
 use std::io::{ErrorKind, Read};
 use std::mem;
+use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
 use std::ptr;
 use std::time::Duration;
@@ -207,6 +208,12 @@ impl TimerFd {
     }
 }
 
+impl AsFd for TimerFd {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        self.0.as_fd()
+    }
+}
+
 impl AsRawFd for TimerFd {
     fn as_raw_fd(&self) -> RawFd {
         self.0.as_raw_fd()
@@ -249,6 +256,11 @@ mod tests {
         let tfd = TimerFd::new().expect("failed to create timerfd");
         let fd = tfd.into_raw_fd();
         assert!(fd > 0);
+    }
+    #[test]
+    fn test_as_fd() {
+        let tfd = TimerFd::new().expect("failed to create timerfd");
+        assert_eq!(tfd.as_fd().as_raw_fd(), tfd.as_raw_fd());
     }
     #[test]
     fn test_one_shot() {
