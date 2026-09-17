@@ -1,5 +1,8 @@
 # Upcoming Release
 
+## Added
+- `apply_filter_with_flags` is now public, so callers can pass seccomp(2) flags such as `SECCOMP_FILTER_FLAG_TSYNC` and `SECCOMP_FILTER_FLAG_LOG` when installing a filter, instead of reimplementing the syscall.
+
 # v0.5.0
 
 ## Added

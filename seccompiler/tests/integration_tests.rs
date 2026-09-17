@@ -8,8 +8,8 @@ use std::collections::BTreeMap;
 use seccompiler::SeccompCmpArgLen::*;
 use seccompiler::SeccompCmpOp::*;
 use seccompiler::{
-    apply_filter, sock_filter, BpfProgram, Error, SeccompAction, SeccompCondition as Cond,
-    SeccompFilter, SeccompRule,
+    apply_filter, apply_filter_with_flags, sock_filter, BpfProgram, Error, SeccompAction,
+    SeccompCondition as Cond, SeccompFilter, SeccompRule,
 };
 use std::convert::TryInto;
 use std::env::consts::ARCH;
@@ -118,6 +118,63 @@ fn test_empty_filter() {
 
     // Check that the getpid syscall returned successfully.
     assert!(pid > 0);
+}
+
+#[test]
+fn test_apply_filter_with_flags() {
+    // An empty denylist filter allows every syscall; installing it with
+    // TSYNC | LOG exercises the flags path.
+    // Kernels older than 4.14 reject SECCOMP_FILTER_FLAG_LOG with EINVAL, in
+    // which case retry without it: the enforcement matters, the audit logging
+    // is best-effort.
+    let filter = SeccompFilter::new(
+        BTreeMap::new(),
+        SeccompAction::Allow,
+        SeccompAction::Errno(FAILURE_CODE as u32),
+        ARCH.try_into().unwrap(),
+    )
+    .unwrap();
+    let prog: BpfProgram = filter.try_into().unwrap();
+
+    // TSYNC synchronises the filter onto every thread of the process, so it
+    // must not be installed from a thread of the shared test binary.
+    // It would poison the harness's other threads, and a sibling thread
+    // holding its own filter would make the call fail with
+    // `Error::ThreadSync`.
+    // Fork instead, as `test_invalid_architecture` does: the child is
+    // single-threaded, so the sync trivially succeeds, and the filter dies
+    // with the child.
+    let pid = unsafe { libc::fork() };
+    match pid {
+        0 => {
+            // No assertion on the pre-install level: a container runtime may
+            // already have installed a filter, which is not this test's subject.
+            let flags = libc::SECCOMP_FILTER_FLAG_TSYNC | libc::SECCOMP_FILTER_FLAG_LOG;
+            match apply_filter_with_flags(&prog, flags) {
+                Ok(()) => {}
+                Err(Error::Seccomp(e)) if e.raw_os_error() == Some(libc::EINVAL) => {
+                    apply_filter_with_flags(&prog, libc::SECCOMP_FILTER_FLAG_TSYNC).unwrap();
+                }
+                Err(e) => panic!("failed to install filter: {:?}", e),
+            }
+
+            let seccomp_level = unsafe { libc::prctl(libc::PR_GET_SECCOMP) };
+            assert_eq!(seccomp_level, 2);
+
+            // `_exit` rather than `process::exit`: a forked child must not
+            // run atexit handlers or flush the parent's stdio buffers.
+            unsafe { libc::_exit(0) };
+        }
+        -1 => panic!("fork failed: {:?}", std::io::Error::last_os_error()),
+        child_pid => {
+            let mut child_status: i32 = -1;
+            let pid_done = unsafe { libc::waitpid(child_pid, &mut child_status, 0) };
+            assert_eq!(pid_done, child_pid);
+
+            assert!(libc::WIFEXITED(child_status));
+            assert_eq!(libc::WEXITSTATUS(child_status), 0);
+        }
+    };
 }
 
 #[test]

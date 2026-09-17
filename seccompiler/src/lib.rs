@@ -325,7 +325,47 @@ pub fn apply_filter_all_threads(bpf_filter: BpfProgramRef) -> Result<()> {
     apply_filter_with_flags(bpf_filter, libc::SECCOMP_FILTER_FLAG_TSYNC)
 }
 
-/// Apply a BPF filter to the calling thread.
+/// Apply a BPF filter, passing `flags` through to the seccomp syscall.
+///
+/// `flags` is a bitset of the `SECCOMP_FILTER_FLAG_*` values that `libc`
+/// defines. [`apply_filter`] and [`apply_filter_all_threads`] are presets of
+/// this function with `0` and `SECCOMP_FILTER_FLAG_TSYNC` respectively.
+///
+/// A combination worth knowing about is `SECCOMP_FILTER_FLAG_TSYNC` together
+/// with `SECCOMP_FILTER_FLAG_LOG`: synchronise the filter onto every thread
+/// of the process, and have the kernel record every refused syscall
+/// (syscall number, pid, comm) to the audit log (`dmesg` where auditd is
+/// absent), subject to `/proc/sys/kernel/seccomp/actions_logged`.
+///
+/// The LOG flag arrived with kernel 4.14; an older kernel rejects it with
+/// `EINVAL`. Callers that want the audit trail where available and the
+/// enforcement everywhere should retry without the flag:
+///
+/// ```
+/// use seccompiler::{apply_filter_with_flags, BpfProgram, Error, SeccompAction, SeccompFilter};
+/// use std::convert::TryInto;
+///
+/// // A filter that refuses getcwd and allows everything else.
+/// let filter: BpfProgram = SeccompFilter::new(
+///     vec![(libc::SYS_getcwd, vec![])].into_iter().collect(),
+///     SeccompAction::Allow,
+///     SeccompAction::Errno(libc::EPERM as u32),
+///     std::env::consts::ARCH.try_into().unwrap(),
+/// )
+/// .unwrap()
+/// .try_into()
+/// .unwrap();
+///
+/// let flags = libc::SECCOMP_FILTER_FLAG_TSYNC | libc::SECCOMP_FILTER_FLAG_LOG;
+/// match apply_filter_with_flags(&filter, flags) {
+///     Ok(()) => {}
+///     Err(Error::Seccomp(e)) if e.raw_os_error() == Some(libc::EINVAL) => {
+///         // Kernel older than 4.14: keep the enforcement, lose the logging.
+///         apply_filter_with_flags(&filter, libc::SECCOMP_FILTER_FLAG_TSYNC).unwrap();
+///     }
+///     Err(e) => panic!("failed to install filter: {:?}", e),
+/// }
+/// ```
 ///
 /// # Arguments
 ///
@@ -333,7 +373,9 @@ pub fn apply_filter_all_threads(bpf_filter: BpfProgramRef) -> Result<()> {
 /// * `flags` - A u64 representing a bitset of seccomp's flags parameter.
 ///
 /// [`BpfProgram`]: type.BpfProgram.html
-fn apply_filter_with_flags(bpf_filter: BpfProgramRef, flags: libc::c_ulong) -> Result<()> {
+/// [`apply_filter`]: fn.apply_filter.html
+/// [`apply_filter_all_threads`]: fn.apply_filter_all_threads.html
+pub fn apply_filter_with_flags(bpf_filter: BpfProgramRef, flags: libc::c_ulong) -> Result<()> {
     // If the program is empty, don't install the filter.
     if bpf_filter.is_empty() {
         return Err(Error::EmptyFilter);
