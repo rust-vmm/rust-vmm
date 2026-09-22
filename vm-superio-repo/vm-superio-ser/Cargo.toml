@@ -1,0 +1,25 @@
+[package]
+name = "vm-superio-ser"
+version = "0.4.1"
+description = "Serialization for legacy device states"
+keywords = ["superio", "serialization", "versioning"]
+repository = "https://github.com/rust-vmm/vm-superio"
+readme = "README.md"
+authors = ["rust-vmm AWS maintainers <rust-vmm-maintainers@amazon.com>"]
+license = "Apache-2.0 OR BSD-3-Clause"
+edition = "2018"
+
+[dependencies]
+serde = { version = "1.0.27", features = ["derive"] }
+# Combining both `version` and `path` so that it is possible to publish
+# the crate on crates.io. More details here:
+# https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#multiple-locations.
+# We are using a fixed version of `vm-superio` so that the current version
+# of `vm-superio-ser` won't take a newer version of vm-superio, with which
+# it may not be compatible.
+vm-superio = { version = "=0.8.1", path = "../vm-superio" }
+
+[dev-dependencies]
+libc = "0.2.39"
+vmm-sys-util = { workspace = true }
+bincode = "1.3"
