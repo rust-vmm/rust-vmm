@@ -4,6 +4,14 @@
 
 ### Changed
 
+- [[#174]](https://github.com/rust-vmm/rust-vmm/pull/174) `VcpuFd::get_one_reg`,
+  `VcpuFd::set_one_reg`, `reg_size` and the `KVM_GET_ONE_REG` /
+  `KVM_SET_ONE_REG` ioctl definitions are now available on all architectures
+  instead of only aarch64 and riscv64. On x86_64 the kernel supports them
+  since Linux 6.18, for MSRs and for KVM defined registers; the first of the
+  latter is `KVM_REG_GUEST_SSP`, the guest's live shadow stack pointer, which
+  `KVM_GET_MSRS` does not carry and which a VMM has to save and restore around
+  a snapshot.
 - [[#382]](https://github.com/rust-vmm/kvm/pull/382) `VmFd::enable_cap` and the
   `KVM_ENABLE_CAP` ioctl definition are now available on all architectures
   instead of only x86_64, s390x and powerpc. aarch64 needs them to enable

@@ -27,7 +27,6 @@ use {
 };
 
 /// Helper method to obtain the size of the register through its id
-#[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))]
 pub fn reg_size(reg_id: u64) -> usize {
     2_usize.pow(((reg_id & KVM_REG_SIZE_MASK) >> KVM_REG_SIZE_SHIFT) as u32)
 }
@@ -1373,7 +1372,9 @@ impl VcpuFd {
     /// Sets the value of one register for this vCPU.
     ///
     /// The id of the register is encoded as specified in the kernel documentation
-    /// for `KVM_SET_ONE_REG`.
+    /// for `KVM_SET_ONE_REG`. On x86_64 the kernel accepts this ioctl since
+    /// Linux 6.18, for MSRs (`KVM_X86_REG_MSR`) and for KVM defined registers
+    /// such as `KVM_REG_GUEST_SSP`.
     ///
     /// # Arguments
     ///
@@ -1384,7 +1385,6 @@ impl VcpuFd {
     ///
     /// `data` should be equal or bigger then the register size
     /// oterwise function will return EINVAL error
-    #[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))]
     pub fn set_one_reg(&self, reg_id: u64, data: &[u8]) -> Result<usize> {
         let reg_size = reg_size(reg_id);
         if data.len() < reg_size {
@@ -1406,7 +1406,9 @@ impl VcpuFd {
     /// Writes the value of the specified vCPU register into provided buffer.
     ///
     /// The id of the register is encoded as specified in the kernel documentation
-    /// for `KVM_GET_ONE_REG`.
+    /// for `KVM_GET_ONE_REG`. On x86_64 the kernel accepts this ioctl since
+    /// Linux 6.18, for MSRs (`KVM_X86_REG_MSR`) and for KVM defined registers
+    /// such as `KVM_REG_GUEST_SSP`.
     ///
     /// # Arguments
     ///
@@ -1416,7 +1418,6 @@ impl VcpuFd {
     ///
     /// `data` should be equal or bigger then the register size
     /// oterwise function will return EINVAL error
-    #[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))]
     pub fn get_one_reg(&self, reg_id: u64, data: &mut [u8]) -> Result<usize> {
         let reg_size = reg_size(reg_id);
         if data.len() < reg_size {
@@ -2978,6 +2979,53 @@ mod tests {
         // Test get a register list contains 200 registers explicitly
         let mut reg_list = RegList::new(200).unwrap();
         vcpu.get_reg_list(&mut reg_list).unwrap();
+    }
+
+    #[test]
+    #[cfg(target_arch = "x86_64")]
+    fn test_one_reg() {
+        let kvm = Kvm::new().unwrap();
+        let vm = kvm.create_vm().unwrap();
+        let vcpu = vm.create_vcpu(0).unwrap();
+
+        // KVM_X86_REG_KVM(KVM_REG_GUEST_SSP), the guest's shadow stack pointer.
+        // It is 64 bits wide and only exists when the vCPU CPUID exposes shadow
+        // stacks (CPUID.(EAX=7,ECX=0):ECX[7]).
+        const GUEST_SSP_REG_ID: u64 = 0x2030_0003_0000_0000;
+
+        // Trying to access an 8 byte register with 7 bytes must fail.
+        vcpu.set_one_reg(GUEST_SSP_REG_ID, &[0_u8; 7]).unwrap_err();
+        vcpu.get_one_reg(GUEST_SSP_REG_ID, &mut [0_u8; 7])
+            .unwrap_err();
+
+        // The kernel rejects a register it does not know.
+        let unknown_reg_id = KVM_REG_X86 | KVM_REG_SIZE_U64 | 0xffff;
+        vcpu.set_one_reg(unknown_reg_id, &0_u64.to_le_bytes())
+            .unwrap_err();
+        vcpu.get_one_reg(unknown_reg_id, &mut [0_u8; 8])
+            .unwrap_err();
+
+        // Without shadow stacks in the vCPU CPUID the register does not exist.
+        vcpu.get_one_reg(GUEST_SSP_REG_ID, &mut [0_u8; 8])
+            .unwrap_err();
+
+        let cpuid = kvm.get_supported_cpuid(KVM_MAX_CPUID_ENTRIES).unwrap();
+        let shstk = cpuid
+            .as_slice()
+            .iter()
+            .any(|e| e.function == 7 && e.index == 0 && e.ecx & (1 << 7) != 0);
+        if !shstk {
+            return;
+        }
+        vcpu.set_cpuid2(&cpuid).unwrap();
+
+        let data: u64 = 0x7fff_ffff_f000;
+        vcpu.set_one_reg(GUEST_SSP_REG_ID, &data.to_le_bytes())
+            .expect("Failed to set the guest SSP register");
+        let mut bytes = [0_u8; 8];
+        vcpu.get_one_reg(GUEST_SSP_REG_ID, &mut bytes)
+            .expect("Failed to get the guest SSP register");
+        assert_eq!(u64::from_le_bytes(bytes), data);
     }
 
     #[test]
