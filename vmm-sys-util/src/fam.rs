@@ -432,20 +432,13 @@ impl<T: Default + FamStruct> FamStructWrapper<T> {
             self.reserve(additional_elements as usize)?;
         }
 
-        let current_mem_allocator_len = self.mem_allocator.len();
         let required_mem_allocator_len =
             FamStructWrapper::<T>::mem_allocator_len(len).ok_or(Error::SizeLimitExceeded)?;
-        // Update the len of the `mem_allocator`.
-        // SAFETY: This is safe since enough capacity has been reserved.
-        unsafe {
-            self.mem_allocator.set_len(required_mem_allocator_len);
-        }
-        // Zero-initialize the additional elements if any.
-        for i in current_mem_allocator_len..required_mem_allocator_len {
-            // SAFETY: Safe as long as the trait is only implemented for POD. This is a requirement
-            // for the trait implementation.
-            self.mem_allocator[i] = unsafe { mem::zeroed() }
-        }
+        self.mem_allocator
+            .resize_with(required_mem_allocator_len, || {
+                // SAFETY: FamStruct implementors must be valid when zero-initialized.
+                unsafe { mem::zeroed() }
+            });
         // Update the len of the underlying `FamStruct`.
         // SAFETY: We just adjusted the memory for the underlying `mem_allocator` to hold `len`
         // entries.
@@ -910,6 +903,15 @@ mod tests {
         for element in adapter.as_slice() {
             assert_eq!(*element, 0_u32);
         }
+
+        // Increasing the length preserves existing entries and zero-initializes new entries.
+        for (index, element) in adapter.as_mut_slice().iter_mut().enumerate() {
+            *element = index as u32 + 1;
+        }
+        desired_len = 20;
+        assert!(adapter.set_len(desired_len).is_ok());
+        assert_eq!(adapter.as_slice()[..10], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+        assert_eq!(adapter.as_slice()[10..], [0; 10]);
 
         // decrease len
         desired_len = 5;
