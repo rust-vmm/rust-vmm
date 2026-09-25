@@ -10,7 +10,7 @@ use std::os::fd::RawFd;
 use std::{
     fs::File,
     io,
-    os::fd::{AsRawFd, FromRawFd, IntoRawFd},
+    os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, IntoRawFd},
     result::Result,
 };
 
@@ -56,6 +56,12 @@ impl EventNotifier {
         Ok(EventNotifier {
             fd: self.fd.try_clone()?,
         })
+    }
+}
+
+impl AsFd for EventNotifier {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        self.fd.as_fd()
     }
 }
 
@@ -109,6 +115,12 @@ impl EventConsumer {
         Ok(EventConsumer {
             fd: self.fd.try_clone()?,
         })
+    }
+}
+
+impl AsFd for EventConsumer {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        self.fd.as_fd()
     }
 }
 
@@ -243,6 +255,14 @@ pub fn new_event_consumer_and_notifier(
 mod tests {
     use super::*;
     use std::{io::pipe, os::fd::IntoRawFd};
+
+    #[test]
+    fn test_as_fd() {
+        let (consumer, notifier) = new_event_consumer_and_notifier(EventFlag::empty())
+            .expect("Failed to create notifier and consumer");
+        assert_eq!(notifier.as_fd().as_raw_fd(), notifier.as_raw_fd());
+        assert_eq!(consumer.as_fd().as_raw_fd(), consumer.as_raw_fd());
+    }
 
     #[test]
     fn test_notify_and_consume() {
