@@ -6,4 +6,6 @@
 /vm-allocator/ @AlexandruCihodaru @alsrdn @jiangliu @andreeaflorescu @gsserge @studychao @roypat @ShadowCurse
 /vmm-sys-util/ @andreeaflorescu @ShadowCurse
 /vm-memory/ @bonzini @ShadowCurse @XanClic
+/vm-superio/ @andreeaflorescu @lauralt @gsserge @roypat @ShadowCurse
+/vm-superio-ser/ @andreeaflorescu @lauralt @gsserge @roypat @ShadowCurse
 /vm-virtio/ @alexandruag @andreeaflorescu @jiangliu @slp @stsquad @epilys @stefano-garzarella
