@@ -99,13 +99,27 @@ bitflags::bitflags! {
 /// [Linux KVM header](https://elixir.bootlin.com/linux/latest/source/include/uapi/linux/kvm.h).
 #[derive(Debug)]
 pub enum VcpuExit<'a> {
-    /// An out port instruction was run on the given port with the given data.
-    IoOut(u16 /* port */, &'a [u8] /* data */),
-    /// An in port instruction was run on the given port.
+    /// A KVM_EXIT_IO triggered through a port-I/O write on the given port.
+    ///
+    /// `data` contains a packed sequence of one or more operations. `size` is
+    /// the size in bytes of each individual operation.
+    IoOut(
+        u16,      /* port */
+        &'a [u8], /* data */
+        usize,    /* size of a single io operation */
+    ),
+    /// A KVM_EXIT_IO triggered through a port-I/O read on the given port.
+    ///
+    /// `data` contains a packed sequence of one or more operations. `size` is
+    /// the size in bytes of each individual operation.
     ///
     /// The given slice should be filled in before [run()](struct.VcpuFd.html#method.run)
     /// is called again.
-    IoIn(u16 /* port */, &'a mut [u8] /* data */),
+    IoIn(
+        u16,          /* port */
+        &'a mut [u8], /* data */
+        usize,        /* size of a single io operation */
+    ),
     /// A read instruction was run against the given MMIO address.
     ///
     /// The given slice should be filled in before [run()](struct.VcpuFd.html#method.run)
@@ -1543,7 +1557,8 @@ impl VcpuFd {
                     // which union field to use.
                     let io = unsafe { run.__bindgen_anon_1.io };
                     let port = io.port;
-                    let data_size = io.count as usize * io.size as usize;
+                    let size = io.size as usize;
+                    let data_size = io.count as usize * size;
                     // SAFETY: The data_offset is defined by the kernel to be some number of bytes
                     // into the kvm_run stucture, which we have fully mmap'd.
                     let data_ptr = unsafe { run_start.offset(io.data_offset as isize) };
@@ -1552,8 +1567,8 @@ impl VcpuFd {
                         // to the mmap of the `kvm_run` struct that this is slicing from.
                         unsafe { std::slice::from_raw_parts_mut::<u8>(data_ptr, data_size) };
                     match u32::from(io.direction) {
-                        KVM_EXIT_IO_IN => Ok(VcpuExit::IoIn(port, data_slice)),
-                        KVM_EXIT_IO_OUT => Ok(VcpuExit::IoOut(port, data_slice)),
+                        KVM_EXIT_IO_IN => Ok(VcpuExit::IoIn(port, data_slice, size)),
+                        KVM_EXIT_IO_OUT => Ok(VcpuExit::IoOut(port, data_slice, size)),
                         _ => Err(errno::Error::new(EINVAL)),
                     }
                 }
@@ -2746,14 +2761,16 @@ mod tests {
         let mut instr_idx = 0;
         loop {
             match vcpu_fd.run().expect("run failed") {
-                VcpuExit::IoIn(addr, data) => {
+                VcpuExit::IoIn(addr, data, size) => {
                     assert_eq!(addr, 0x3f8);
                     assert_eq!(data.len(), 1);
+                    assert_eq!(size, 1);
                 }
-                VcpuExit::IoOut(addr, data) => {
+                VcpuExit::IoOut(addr, data, size) => {
                     assert_eq!(addr, 0x3f8);
                     assert_eq!(data.len(), 1);
                     assert_eq!(data[0], b'5');
+                    assert_eq!(size, 1);
                 }
                 VcpuExit::MmioRead(addr, data) => {
                     assert_eq!(addr, 0x8000);
@@ -3612,11 +3629,12 @@ mod tests {
         // Unregister and check that the next PIO write triggers an exit
         vm.unregister_coalesced_mmio(addr, SIZE).unwrap();
         let exit = vcpu.run().unwrap();
-        let VcpuExit::IoOut(port, data) = exit else {
+        let VcpuExit::IoOut(port, data, size) = exit else {
             panic!("Unexpected VM exit: {:?}", exit);
         };
         assert_eq!(port, PORT as u16);
         assert_eq!(data, (DATA as u8).to_le_bytes());
+        assert_eq!(size, SIZE as usize);
     }
 
     #[test]
@@ -3745,5 +3763,70 @@ mod tests {
         assert_eq!(state_buffer.size as usize, size_of::<kvm_nested_state>());
 
         vcpu.set_nested_state(&old_state).unwrap();
+    }
+
+    #[test]
+    #[cfg(target_arch = "x86_64")]
+    fn test_repeated_pio() {
+        use std::io::Write;
+
+        const PORT: u64 = 0x2c;
+        const REPETITIONS: u64 = 0x10;
+        const INS_SIZE: u64 = 0x2;
+
+        #[rustfmt::skip]
+        let code = [
+            0xf3, 0x6D,   // rep ins
+            0xf4,         // hlt
+        ];
+
+        let kvm = Kvm::new().unwrap();
+        let vm = kvm.create_vm().unwrap();
+
+        // Prepare guest memory
+        let mem_size = 0x4000;
+        let load_addr = mmap_anonymous(mem_size).as_ptr();
+        let guest_addr: u64 = 0x1000;
+        let slot = 0;
+        let mem_region = kvm_userspace_memory_region {
+            slot,
+            guest_phys_addr: guest_addr,
+            memory_size: mem_size as u64,
+            userspace_addr: load_addr as u64,
+            flags: 0,
+        };
+
+        unsafe {
+            vm.set_user_memory_region(mem_region).unwrap();
+            // Get a mutable slice of `mem_size` from `load_addr`.
+            // This is safe because we mapped it before.
+            let mut slice = std::slice::from_raw_parts_mut(load_addr, mem_size);
+            slice.write_all(&code).unwrap();
+        }
+
+        let mut vcpu = vm.create_vcpu(0).unwrap();
+
+        // Set regs
+        let mut regs = vcpu.get_regs().unwrap();
+        regs.rip = guest_addr;
+        regs.rcx = REPETITIONS;
+        regs.rdx = PORT;
+        regs.rflags = 2;
+        vcpu.set_regs(&regs).unwrap();
+
+        // Set sregs
+        let mut sregs = vcpu.get_sregs().unwrap();
+        sregs.cs.base = 0;
+        sregs.cs.selector = 0;
+        vcpu.set_sregs(&sregs).unwrap();
+
+        let exit = vcpu.run().unwrap();
+        let VcpuExit::IoIn(port, data, size) = exit else {
+            panic!("Unexpected VM exit: {:?}", exit);
+        };
+        assert_eq!(port, PORT as u16);
+        // We expect to perform 16 ins instructions of a 2-byte width each.
+        assert_eq!(data.len(), (REPETITIONS * INS_SIZE) as usize);
+        assert_eq!(size, 2);
     }
 }
