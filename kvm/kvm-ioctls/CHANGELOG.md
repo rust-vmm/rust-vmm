@@ -2,6 +2,11 @@
 
 ## Upcoming Release
 
+### Added
+
+- [[#178]](https://github.com/rust-vmm/rust-vmm/pull/178) Added support for
+  `KVM_REINJECT_CONTROL` vm ioctl on x86_64.
+
 ### Changed
 
 - [[#174]](https://github.com/rust-vmm/rust-vmm/pull/174) `VcpuFd::get_one_reg`,
