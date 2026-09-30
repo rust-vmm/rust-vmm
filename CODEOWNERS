@@ -4,6 +4,7 @@
 /linux-loader/ @aghecenco @sameo @rbradford @roypat @andreitraistaru @ShadowCurse
 /seccompiler/ @alindima @petreeftime
 /vm-allocator/ @AlexandruCihodaru @alsrdn @jiangliu @andreeaflorescu @gsserge @studychao @roypat @ShadowCurse
+/vm-fdt/ @danielverkamp
 /vmm-sys-util/ @andreeaflorescu @ShadowCurse
 /vm-memory/ @bonzini @ShadowCurse @XanClic
 /vm-virtio/ @alexandruag @andreeaflorescu @jiangliu @slp @stsquad @epilys @stefano-garzarella
