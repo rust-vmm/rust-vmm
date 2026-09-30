@@ -189,16 +189,16 @@
 //! // 6. Run code on the vCPU.
 //! loop {
 //!     match vcpu_fd.run().expect("run failed") {
-//!         VcpuExit::IoIn(addr, data) => {
+//!         VcpuExit::IoIn(addr, data, size) => {
 //!             println!(
-//!                 "Received an I/O in exit. Address: {:#x}. Data: {:#x}",
-//!                 addr, data[0],
+//!                 "Received an I/O in exit. Address: {:#x}. Data: {:#x}. Single I/O operation size: {:#x}",
+//!                 addr, data[0], size
 //!             );
 //!         }
-//!         VcpuExit::IoOut(addr, data) => {
+//!         VcpuExit::IoOut(addr, data, size) => {
 //!             println!(
-//!                 "Received an I/O out exit. Address: {:#x}. Data: {:#x}",
-//!                 addr, data[0],
+//!                 "Received an I/O out exit. Address: {:#x}. Data: {:#x}. Single I/O operation size: {:#x}",
+//!                 addr, data[0], size
 //!             );
 //!         }
 //!         VcpuExit::MmioRead(addr, data) => {
