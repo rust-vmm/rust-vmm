@@ -45,6 +45,12 @@ pub use xen::{
     Error as MmapRegionError, GrantDmaBuf as SharedOsHandle, MmapRange, MmapRegion, MmapXenFlags,
 };
 
+#[cfg(all(not(feature = "xen"), target_os = "linux"))]
+use {
+    crate::udmabuf::{UdmabufDriver, UdmabufError},
+    std::{os::fd::OwnedFd as SharedOsHandle, sync::OnceLock},
+};
+
 #[cfg(target_family = "windows")]
 pub use std::io::Error as MmapRegionError;
 #[cfg(target_family = "windows")]
@@ -189,7 +195,7 @@ impl<B: Bitmap> GuestMemoryRegionBytes for GuestRegionMmap<B> {}
 /// virtual address space of the calling process.
 pub type GuestMemoryMmap<B = ()> = GuestRegionCollection<GuestRegionMmap<B>>;
 
-#[cfg(all(feature = "xen", target_family = "unix"))]
+#[cfg(any(all(feature = "xen", target_family = "unix"), target_os = "linux"))]
 /// An extension for `GuestMemoryMmap` providing a way to share handles to guest memory.
 pub trait GuestMemoryExportExt {
     /// Creates a shareable OS-level handle (such as a DMA-BUF) for a given subset
@@ -227,6 +233,24 @@ impl<B: Bitmap> GuestMemoryExportExt for GuestMemoryMmap<B> {
                 r.export_dma_buf(page_addrs)
                     .map_err(guest_memory::Error::GrantExportError)
             })
+    }
+}
+
+#[cfg(all(not(feature = "xen"), target_os = "linux"))]
+static UDMABUF_DRIVER: OnceLock<Option<UdmabufDriver>> = OnceLock::new();
+
+#[cfg(all(not(feature = "xen"), target_os = "linux"))]
+impl GuestMemoryExportExt for GuestMemoryMmap {
+    fn get_os_handle(
+        &self,
+        iovecs: &[(GuestAddress, usize)],
+    ) -> guest_memory::Result<SharedOsHandle> {
+        UDMABUF_DRIVER
+            .get_or_init(|| UdmabufDriver::new().ok())
+            .as_ref()
+            .ok_or(guest_memory::Error::UdmabufOpenError)? // XXX: losing error, can't clone as it's behind ref
+            .create_udmabuf(self, iovecs)
+            .map_err(guest_memory::Error::UdmabufExportError)
     }
 }
 

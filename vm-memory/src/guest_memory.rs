@@ -95,6 +95,13 @@ pub enum Error {
     /// Xen grant DMA-BUF export error
     #[error("Failed to export DMA-BUF: {0}")]
     GrantExportError(crate::mmap::xen::Error),
+    #[cfg(all(feature = "backend-mmap", not(feature = "xen"), target_os = "linux"))]
+    #[error("Failed to open udmabuf device")]
+    UdmabufOpenError,
+    #[cfg(all(feature = "backend-mmap", not(feature = "xen"), target_os = "linux"))]
+    /// udmabuf DMA-BUF export error
+    #[error("Failed to export DMA-BUF: {0}")]
+    UdmabufExportError(crate::udmabuf::UdmabufError),
 }
 
 impl From<volatile_memory::Error> for Error {
