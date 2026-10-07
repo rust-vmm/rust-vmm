@@ -967,10 +967,11 @@ pub struct kvm_riscv_config {
     pub mimpid: ::std::os::raw::c_ulong,
     pub zicboz_block_size: ::std::os::raw::c_ulong,
     pub satp_mode: ::std::os::raw::c_ulong,
+    pub zicbop_block_size: ::std::os::raw::c_ulong,
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
-    ["Size of kvm_riscv_config"][::std::mem::size_of::<kvm_riscv_config>() - 56usize];
+    ["Size of kvm_riscv_config"][::std::mem::size_of::<kvm_riscv_config>() - 64usize];
     ["Alignment of kvm_riscv_config"][::std::mem::align_of::<kvm_riscv_config>() - 8usize];
     ["Offset of field: kvm_riscv_config::isa"]
         [::std::mem::offset_of!(kvm_riscv_config, isa) - 0usize];
@@ -986,6 +987,8 @@ const _: () = {
         [::std::mem::offset_of!(kvm_riscv_config, zicboz_block_size) - 40usize];
     ["Offset of field: kvm_riscv_config::satp_mode"]
         [::std::mem::offset_of!(kvm_riscv_config, satp_mode) - 48usize];
+    ["Offset of field: kvm_riscv_config::zicbop_block_size"]
+        [::std::mem::offset_of!(kvm_riscv_config, zicbop_block_size) - 56usize];
 };
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
