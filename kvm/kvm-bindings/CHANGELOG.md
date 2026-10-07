@@ -2,6 +2,14 @@
 
 ## Upcoming Release
 
+### Changed
+
+- [[#188]](https://github.com/rust-vmm/rust-vmm/pull/188)
+  Regenerated the riscv64 `KVM_RISCV_ISA_EXT_ID` enum from Linux
+  v7.3-rc6 UAPI headers, adding `ZICBOP`, `ZFBFMIN`, `ZVFBFMIN`,
+  `ZVFBFWMA`, `ZCLSD`, `ZILSD`, `ZALASR`, `ZICFILP` and `ZICFISS`
+  (IDs 71-79) and bumping `..._MAX` from 71 to 80.
+
 ## v0.14.2
 
 ### Added
