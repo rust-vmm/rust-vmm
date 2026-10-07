@@ -9,6 +9,10 @@
   v7.3-rc6 UAPI headers, adding `ZICBOP`, `ZFBFMIN`, `ZVFBFMIN`,
   `ZVFBFWMA`, `ZCLSD`, `ZILSD`, `ZALASR`, `ZICFILP` and `ZICFISS`
   (IDs 71-79) and bumping `..._MAX` from 71 to 80.
+- [[#188]](https://github.com/rust-vmm/rust-vmm/pull/188)
+  Added the missing `zicbop_block_size` trailing field to the riscv64
+  `kvm_riscv_config` struct, matching the kernel's
+  `arch/riscv/include/uapi/asm/kvm.h`.
 
 ## v0.14.2
 
