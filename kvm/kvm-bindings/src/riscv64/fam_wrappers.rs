@@ -8,8 +8,11 @@ use vmm_sys_util::generate_fam_struct_impl;
 use super::bindings::*;
 
 // There is no constant in the kernel as far as the maximum number
-// of registers on RISC-V, but KVM_GET_REG_LIST usually returns around 160.
-const RISCV64_REGS_MAX: usize = 200;
+// of registers on RISC-V. KVM_GET_REG_LIST usually returns around 160,
+// but RVA23S64-class hardware with Vector, AIA and SBI extensions enabled
+// can exceed 200 (observed: 246), so this ceiling is kept generously above
+// any count seen in practice.
+const RISCV64_REGS_MAX: usize = 512;
 
 // Implement the FamStruct trait for kvm_reg_list.
 generate_fam_struct_impl!(kvm_reg_list, u64, reg, u64, n, RISCV64_REGS_MAX);
