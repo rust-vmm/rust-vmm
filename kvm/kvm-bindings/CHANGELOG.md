@@ -21,6 +21,10 @@
 - Added the missing `zicbop_block_size` trailing field to the riscv64
   `kvm_riscv_config` struct, matching the kernel's
   `arch/riscv/include/uapi/asm/kvm.h`.
+- Raised the riscv64 `RegList` capacity ceiling (`RISCV64_REGS_MAX`)
+  from 200 to 512. Real RVA23S64-class hardware with Vector, AIA and
+  SBI extensions enabled has been observed to report up to 246
+  registers via `KVM_GET_REG_LIST`, above the old cap.
 
 ## v0.14.1
 
