@@ -1323,6 +1323,54 @@ impl VcpuFd {
         Ok(())
     }
 
+    /// Returns the guest registers that are supported for the
+    /// KVM_GET_ONE_REG/KVM_SET_ONE_REG calls, without requiring the caller
+    /// to pre-guess a buffer size.
+    ///
+    /// Unlike [`get_reg_list`](VcpuFd::get_reg_list), which fails with
+    /// `E2BIG` if the provided `RegList` is too small, this probes the
+    /// kernel for the real register count first (as described for
+    /// `KVM_GET_REG_LIST` in the
+    /// [KVM API doc](https://docs.kernel.org/virt/kvm/api.html#kvm-get-reg-list)),
+    /// then allocates a correctly-sized `RegList` and retries.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use kvm_ioctls::Kvm;
+    /// let kvm = Kvm::new().unwrap();
+    /// let vm = kvm.create_vm().unwrap();
+    /// let vcpu = vm.create_vcpu(0).unwrap();
+    ///
+    /// // KVM_GET_REG_LIST on Aarch64 demands that the vcpus be initialized.
+    /// # #[cfg(target_arch = "aarch64")]
+    /// # {
+    /// let mut kvi = kvm_bindings::kvm_vcpu_init::default();
+    /// vm.get_preferred_target(&mut kvi).unwrap();
+    /// vcpu.vcpu_init(&kvi).expect("Cannot initialize vcpu");
+    ///
+    /// let reg_list = vcpu.get_reg_list_auto().unwrap();
+    /// assert!(reg_list.as_fam_struct_ref().n > 0);
+    /// # }
+    /// ```
+    #[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))]
+    pub fn get_reg_list_auto(&self) -> Result<RegList> {
+        let mut probe = RegList::new(0).map_err(|_| errno::Error::new(EINVAL))?;
+        match self.get_reg_list(&mut probe) {
+            Ok(()) => return Ok(probe),
+            Err(e) if e.errno() == libc::E2BIG => {}
+            Err(e) => return Err(e),
+        }
+        // SAFETY: The probe call above either returned successfully (in
+        // which case we already returned) or failed with E2BIG, in which
+        // case the kernel has written the real register count into `n`
+        // and touched nothing else.
+        let needed = unsafe { probe.as_mut_fam_struct() }.n as usize;
+        let mut reg_list = RegList::new(needed).map_err(|_| errno::Error::new(EINVAL))?;
+        self.get_reg_list(&mut reg_list)?;
+        Ok(reg_list)
+    }
+
     /// Sets processor-specific debug registers and configures the vcpu for handling
     /// certain guest debug events using the `KVM_SET_GUEST_DEBUG` ioctl.
     ///
@@ -2909,6 +2957,22 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_arch = "aarch64")]
+    fn test_get_reg_list_auto() {
+        let kvm = Kvm::new().unwrap();
+        let vm = kvm.create_vm().unwrap();
+        let vcpu = vm.create_vcpu(0).unwrap();
+
+        let mut kvi = kvm_vcpu_init::default();
+        vm.get_preferred_target(&mut kvi)
+            .expect("Cannot get preferred target");
+        vcpu.vcpu_init(&kvi).expect("Cannot initialize vcpu");
+
+        let reg_list = vcpu.get_reg_list_auto().unwrap();
+        assert!(reg_list.as_fam_struct_ref().n > 0);
+    }
+
+    #[test]
     #[cfg(target_arch = "riscv64")]
     fn test_set_one_reg() {
         let kvm = Kvm::new().unwrap();
@@ -3026,6 +3090,17 @@ mod tests {
         vcpu.get_one_reg(GUEST_SSP_REG_ID, &mut bytes)
             .expect("Failed to get the guest SSP register");
         assert_eq!(u64::from_le_bytes(bytes), data);
+    }
+
+    #[test]
+    #[cfg(target_arch = "riscv64")]
+    fn test_get_reg_list_auto() {
+        let kvm = Kvm::new().unwrap();
+        let vm = kvm.create_vm().unwrap();
+        let vcpu = vm.create_vcpu(0).unwrap();
+
+        let reg_list = vcpu.get_reg_list_auto().unwrap();
+        assert!(reg_list.as_fam_struct_ref().n > 0);
     }
 
     #[test]
