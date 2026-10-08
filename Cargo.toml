@@ -10,6 +10,7 @@ members = [
   "linux-loader",
   "seccompiler",
   "vm-allocator",
+  "vm-device",
   "vm-memory",
   "vmm-sys-util",
   "vm-virtio/virtio-bindings",
