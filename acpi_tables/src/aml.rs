@@ -32,21 +32,29 @@ const NAMECHARBASE: u8 = 0x40;
 
 const EXTOPPREFIX: u8 = 0x5b;
 const MUTEXOP: u8 = 0x01;
+const CONDREFOFOP: u8 = 0x12;
 const CREATEFIELDOP: u8 = 0x13;
+const STALLOP: u8 = 0x21;
+const SLEEPOP: u8 = 0x22;
 const ACQUIREOP: u8 = 0x23;
 const RELEASEOP: u8 = 0x27;
 const OPREGIONOP: u8 = 0x80;
 const FIELDOP: u8 = 0x81;
 const DEVICEOP: u8 = 0x82;
 const POWERRESOURCEOP: u8 = 0x84;
+const THERMALZONEOP: u8 = 0x85;
 
 const LOCAL0OP: u8 = 0x60;
 const ARG0OP: u8 = 0x68;
 const STOREOP: u8 = 0x70;
+const REFOFOP: u8 = 0x71;
 const ADDOP: u8 = 0x72;
 const CONCATOP: u8 = 0x73;
 const SUBTRACTOP: u8 = 0x74;
+const INCREMENTOP: u8 = 0x75;
+const DECREMENTOP: u8 = 0x76;
 const MULTIPLYOP: u8 = 0x77;
+const DIVIDEOP: u8 = 0x78;
 const SHIFTLEFTOP: u8 = 0x79;
 const SHIFTRIGHTOP: u8 = 0x7a;
 const ANDOP: u8 = 0x7b;
@@ -77,6 +85,7 @@ const IFOP: u8 = 0xa0;
 const ELSEOP: u8 = 0xa1;
 const WHILEOP: u8 = 0xa2;
 const RETURNOP: u8 = 0xa4;
+const BREAKOP: u8 = 0xa5;
 const ONESOP: u8 = 0xff;
 
 // AML resouce data fields
@@ -88,6 +97,8 @@ const DWORDADDRSPACEDESC: u8 = 0x87;
 const WORDADDRSPACEDESC: u8 = 0x88;
 const EXTIRQDESC: u8 = 0x89;
 const QWORDADDRSPACEDESC: u8 = 0x8A;
+const GPIOCONNECTIONDESC: u8 = 0x8C;
+const SERIALBUSCONNECTIONDESC: u8 = 0x8E;
 
 /// Zero object in ASL.
 pub const ZERO: Zero = Zero {};
@@ -833,6 +844,223 @@ impl Aml for IrqNoFlags {
     }
 }
 
+/// GPIO interrupt trigger mode.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GpioIntMode {
+    Level = 0,
+    Edge = 1,
+}
+
+/// GPIO interrupt polarity.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GpioIntPolarity {
+    ActiveHigh = 0,
+    ActiveLow = 1,
+    ActiveBoth = 2,
+}
+
+/// GPIO pin pull configuration.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GpioPinConfig {
+    Default = 0,
+    PullUp = 1,
+    PullDown = 2,
+    PullNone = 3,
+}
+
+/// GPIO I/O restriction mode.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GpioIoRestriction {
+    None = 0,
+    InputOnly = 1,
+    OutputOnly = 2,
+    Preserve = 3,
+}
+
+/// GPIO Interrupt Connection resource descriptor.
+pub struct GpioInt<'a> {
+    pub resource_source: &'a str,
+    pub pins: &'a [u16],
+    pub consumer: bool,
+    pub mode: GpioIntMode,
+    pub polarity: GpioIntPolarity,
+    pub shared: bool,
+    pub pin_config: GpioPinConfig,
+    pub debounce: u16,
+}
+
+impl Aml for GpioInt<'_> {
+    fn to_aml_bytes(&self, sink: &mut dyn AmlSink) {
+        const PIN_TABLE_OFFSET: u16 = 23;
+
+        let pin_table_size = u16::try_from(self.pins.len() * 2).unwrap();
+        let resource_source_size = u16::try_from(self.resource_source.len() + 1).unwrap();
+        let resource_source_offset = PIN_TABLE_OFFSET.checked_add(pin_table_size).unwrap();
+        let vendor_data_offset = resource_source_offset
+            .checked_add(resource_source_size)
+            .unwrap();
+
+        sink.byte(GPIOCONNECTIONDESC);
+        sink.word(vendor_data_offset - 3);
+        sink.byte(1); // Revision ID
+        sink.byte(0); // Interrupt connection
+        sink.word(self.consumer as u16);
+        sink.word(self.mode as u16 | ((self.polarity as u16) << 1) | ((self.shared as u16) << 3));
+        sink.byte(self.pin_config as u8);
+        sink.word(0); // Output drive strength
+        sink.word(self.debounce);
+        sink.word(PIN_TABLE_OFFSET);
+        sink.byte(0); // Resource source index
+        sink.word(resource_source_offset);
+        sink.word(vendor_data_offset);
+        sink.word(0); // Vendor data length
+        for &pin in self.pins {
+            sink.word(pin);
+        }
+        sink.vec(self.resource_source.as_bytes());
+        sink.byte(0);
+    }
+}
+
+/// GPIO I/O Connection resource descriptor.
+pub struct GpioIo<'a> {
+    pub resource_source: &'a str,
+    pub pins: &'a [u16],
+    pub consumer: bool,
+    pub io_restriction: GpioIoRestriction,
+    pub pin_config: GpioPinConfig,
+    pub drive_strength: u16,
+    pub debounce: u16,
+}
+
+impl Aml for GpioIo<'_> {
+    fn to_aml_bytes(&self, sink: &mut dyn AmlSink) {
+        const PIN_TABLE_OFFSET: u16 = 23;
+
+        let pin_table_size = u16::try_from(self.pins.len() * 2).unwrap();
+        let resource_source_size = u16::try_from(self.resource_source.len() + 1).unwrap();
+        let resource_source_offset = PIN_TABLE_OFFSET.checked_add(pin_table_size).unwrap();
+        let vendor_data_offset = resource_source_offset
+            .checked_add(resource_source_size)
+            .unwrap();
+
+        sink.byte(GPIOCONNECTIONDESC);
+        sink.word(vendor_data_offset - 3);
+        sink.byte(1); // Revision ID
+        sink.byte(1); // I/O connection
+        sink.word(self.consumer as u16);
+        sink.word(self.io_restriction as u16);
+        sink.byte(self.pin_config as u8);
+        sink.word(self.drive_strength);
+        sink.word(self.debounce);
+        sink.word(PIN_TABLE_OFFSET);
+        sink.byte(0); // Resource source index
+        sink.word(resource_source_offset);
+        sink.word(vendor_data_offset);
+        sink.word(0); // Vendor data length
+        for &pin in self.pins {
+            sink.word(pin);
+        }
+        sink.vec(self.resource_source.as_bytes());
+        sink.byte(0);
+    }
+}
+
+/// I2C Serial Bus Connection resource descriptor.
+pub struct I2cSerialBus<'a> {
+    pub resource_source: &'a str,
+    pub slave_address: u16,
+    pub connection_speed: u32,
+    pub address_10bit: bool,
+    pub consumer: bool,
+}
+
+impl Aml for I2cSerialBus<'_> {
+    fn to_aml_bytes(&self, sink: &mut dyn AmlSink) {
+        const TYPE_DATA_LENGTH: u16 = 6;
+
+        let data_length = 9 + TYPE_DATA_LENGTH as usize + self.resource_source.len() + 1;
+        sink.byte(SERIALBUSCONNECTIONDESC);
+        sink.word(u16::try_from(data_length).unwrap());
+        sink.byte(1); // Revision ID
+        sink.byte(0); // Resource source index
+        sink.byte(1); // I2C
+        sink.byte((self.consumer as u8) << 1);
+        sink.word(self.address_10bit as u16);
+        sink.byte(1); // Type-specific revision ID
+        sink.word(TYPE_DATA_LENGTH);
+        sink.dword(self.connection_speed);
+        sink.word(self.slave_address);
+        sink.vec(self.resource_source.as_bytes());
+        sink.byte(0);
+    }
+}
+
+/// SPI clock phase.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpiClockPhase {
+    First = 0,
+    Second = 1,
+}
+
+/// SPI clock polarity.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpiClockPolarity {
+    Low = 0,
+    High = 1,
+}
+
+/// SPI wire mode.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpiWireMode {
+    FourWire = 0,
+    ThreeWire = 1,
+}
+
+/// SPI chip-select polarity.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpiDevicePolarity {
+    ActiveLow = 0,
+    ActiveHigh = 1,
+}
+
+/// SPI Serial Bus Connection resource descriptor.
+pub struct SpiSerialBus<'a> {
+    pub resource_source: &'a str,
+    pub connection_speed: u32,
+    pub data_bit_length: u8,
+    pub clock_phase: SpiClockPhase,
+    pub clock_polarity: SpiClockPolarity,
+    pub wire_mode: SpiWireMode,
+    pub device_polarity: SpiDevicePolarity,
+    pub device_selection: u16,
+    pub consumer: bool,
+}
+
+impl Aml for SpiSerialBus<'_> {
+    fn to_aml_bytes(&self, sink: &mut dyn AmlSink) {
+        const TYPE_DATA_LENGTH: u16 = 9;
+
+        let data_length = 9 + TYPE_DATA_LENGTH as usize + self.resource_source.len() + 1;
+        sink.byte(SERIALBUSCONNECTIONDESC);
+        sink.word(u16::try_from(data_length).unwrap());
+        sink.byte(1); // Revision ID
+        sink.byte(0); // Resource source index
+        sink.byte(2); // SPI
+        sink.byte((self.consumer as u8) << 1);
+        sink.word(self.wire_mode as u16 | ((self.device_polarity as u16) << 1));
+        sink.byte(1); // Type-specific revision ID
+        sink.word(TYPE_DATA_LENGTH);
+        sink.dword(self.connection_speed);
+        sink.byte(self.data_bit_length);
+        sink.byte(self.clock_phase as u8);
+        sink.byte(self.clock_polarity as u8);
+        sink.word(self.device_selection);
+        sink.vec(self.resource_source.as_bytes());
+        sink.byte(0);
+    }
+}
+
 fn write_irq_mask_bytes(number: u8, sink: &mut dyn AmlSink) {
     assert!(number <= 15);
     if number < 8 {
@@ -1263,6 +1491,55 @@ impl Aml for Store<'_> {
     }
 }
 
+/// Conditionally create a reference to an object if it exists.
+pub struct CondRefOf<'a> {
+    source: &'a dyn Aml,
+    target: &'a dyn Aml,
+}
+
+impl<'a> CondRefOf<'a> {
+    /// Create a conditional reference from `source` into `target`.
+    pub fn new(source: &'a dyn Aml, target: &'a dyn Aml) -> Self {
+        Self { source, target }
+    }
+}
+
+impl Aml for CondRefOf<'_> {
+    fn to_aml_bytes(&self, sink: &mut dyn AmlSink) {
+        sink.byte(EXTOPPREFIX);
+        sink.byte(CONDREFOFOP);
+        self.source.to_aml_bytes(sink);
+        self.target.to_aml_bytes(sink);
+    }
+}
+
+macro_rules! extended_object_op {
+    ($name:ident, $opcode:expr) => {
+        /// Extended operation on an AML object.
+        pub struct $name<'a> {
+            object: &'a dyn Aml,
+        }
+
+        impl<'a> $name<'a> {
+            /// Create the extended object operation.
+            pub fn new(object: &'a dyn Aml) -> Self {
+                Self { object }
+            }
+        }
+
+        impl Aml for $name<'_> {
+            fn to_aml_bytes(&self, sink: &mut dyn AmlSink) {
+                sink.byte(EXTOPPREFIX);
+                sink.byte($opcode);
+                self.object.to_aml_bytes(sink);
+            }
+        }
+    };
+}
+
+extended_object_op!(Stall, STALLOP);
+extended_object_op!(Sleep, SLEEPOP);
+
 /// Mutex object with a mutex name and a synchronization level.
 pub struct Mutex {
     path: Path,
@@ -1381,6 +1658,15 @@ impl Aml for While<'_> {
     }
 }
 
+/// Terminate the innermost enclosing [`While`] loop.
+pub struct Break;
+
+impl Aml for Break {
+    fn to_aml_bytes(&self, sink: &mut dyn AmlSink) {
+        sink.byte(BREAKOP);
+    }
+}
+
 macro_rules! object_op {
     ($name:ident, $opcode:expr) => {
         /// General operation on a object.
@@ -1404,6 +1690,9 @@ macro_rules! object_op {
     };
 }
 
+object_op!(RefOf, REFOFOP);
+object_op!(Increment, INCREMENTOP);
+object_op!(Decrement, DECREMENTOP);
 object_op!(ObjectType, OBJECTTYPEOP);
 object_op!(SizeOf, SIZEOFOP);
 object_op!(Return, RETURNOP);
@@ -1454,6 +1743,41 @@ binary_op!(Index, INDEXOP);
 binary_op!(ToString, TOSTRINGOP);
 binary_op!(CreateDWordField, CREATEDWFIELDOP);
 binary_op!(CreateQWordField, CREATEQWFIELDOP);
+
+/// Divide two AML integers and store both the remainder and quotient.
+pub struct Divide<'a> {
+    dividend: &'a dyn Aml,
+    divisor: &'a dyn Aml,
+    remainder: &'a dyn Aml,
+    quotient: &'a dyn Aml,
+}
+
+impl<'a> Divide<'a> {
+    /// Create a divide operation.
+    pub fn new(
+        dividend: &'a dyn Aml,
+        divisor: &'a dyn Aml,
+        remainder: &'a dyn Aml,
+        quotient: &'a dyn Aml,
+    ) -> Self {
+        Self {
+            dividend,
+            divisor,
+            remainder,
+            quotient,
+        }
+    }
+}
+
+impl Aml for Divide<'_> {
+    fn to_aml_bytes(&self, sink: &mut dyn AmlSink) {
+        sink.byte(DIVIDEOP);
+        self.dividend.to_aml_bytes(sink);
+        self.divisor.to_aml_bytes(sink);
+        self.remainder.to_aml_bytes(sink);
+        self.quotient.to_aml_bytes(sink);
+    }
+}
 
 macro_rules! convert_op {
     ($name:ident, $opcode:expr) => {
@@ -1700,6 +2024,35 @@ impl Aml for Uuid {
     }
 }
 
+/// Thermal Zone object containing thermal control methods and values.
+pub struct ThermalZone<'a> {
+    name: Path,
+    children: Vec<&'a dyn Aml>,
+}
+
+impl<'a> ThermalZone<'a> {
+    /// Create a Thermal Zone object.
+    pub fn new(name: Path, children: Vec<&'a dyn Aml>) -> Self {
+        Self { name, children }
+    }
+}
+
+impl Aml for ThermalZone<'_> {
+    fn to_aml_bytes(&self, sink: &mut dyn AmlSink) {
+        let mut bytes = Vec::new();
+        self.name.to_aml_bytes(&mut bytes);
+        for child in &self.children {
+            child.to_aml_bytes(&mut bytes);
+        }
+
+        let pkg_length = create_pkg_length(bytes.len(), true);
+        sink.byte(EXTOPPREFIX);
+        sink.byte(THERMALZONEOP);
+        sink.vec(&pkg_length);
+        sink.vec(&bytes);
+    }
+}
+
 /// Power Resource object. 'children' represents Power Resource method.
 pub struct PowerResource<'a> {
     name: Path,
@@ -1740,8 +2093,8 @@ impl Aml for PowerResource<'_> {
         // PkgLength
         let pkg_length = create_pkg_length(bytes.len(), true);
 
-        sink.byte(POWERRESOURCEOP);
         sink.byte(EXTOPPREFIX);
+        sink.byte(POWERRESOURCEOP);
         sink.vec(&pkg_length);
         sink.vec(&bytes);
     }
@@ -1839,6 +2192,96 @@ mod tests {
         ];
         let bytes = Scope::raw("_SB_.MBRD".into(), vec![0xAA, 0xBB, 0xCC, 0xDD]);
         assert_eq!(bytes, scope);
+    }
+
+    #[test]
+    fn test_gpio_connection_descriptors() {
+        let gpio_int = GpioInt {
+            resource_source: "\\_SB.GPI0",
+            pins: &[42],
+            consumer: true,
+            mode: GpioIntMode::Edge,
+            polarity: GpioIntPolarity::ActiveLow,
+            shared: false,
+            pin_config: GpioPinConfig::PullUp,
+            debounce: 0,
+        };
+        let gpio_io = GpioIo {
+            resource_source: "\\_SB.GPI0",
+            pins: &[10, 11],
+            consumer: true,
+            io_restriction: GpioIoRestriction::None,
+            pin_config: GpioPinConfig::Default,
+            drive_strength: 0,
+            debounce: 0,
+        };
+
+        let mut bytes = Vec::new();
+        gpio_int.to_aml_bytes(&mut bytes);
+        assert_eq!(
+            bytes,
+            b"\x8c\x20\x00\x01\x00\x01\x00\x03\x00\x01\x00\x00\x00\x00\x17\x00\x00\x19\x00\x23\x00\x00\x00\x2a\x00\\_SB.GPI0\x00"
+        );
+
+        bytes.clear();
+        gpio_io.to_aml_bytes(&mut bytes);
+        assert_eq!(
+            bytes,
+            b"\x8c\x22\x00\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x17\x00\x00\x1b\x00\x25\x00\x00\x00\x0a\x00\x0b\x00\\_SB.GPI0\x00"
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_gpio_connection_descriptor_rejects_offset_overflow() {
+        let resource_source = "a".repeat(u16::MAX as usize - 1);
+        GpioInt {
+            resource_source: &resource_source,
+            pins: &[],
+            consumer: true,
+            mode: GpioIntMode::Level,
+            polarity: GpioIntPolarity::ActiveHigh,
+            shared: false,
+            pin_config: GpioPinConfig::Default,
+            debounce: 0,
+        }
+        .to_aml_bytes(&mut Vec::new());
+    }
+
+    #[test]
+    fn test_serial_bus_connection_descriptors() {
+        let i2c = I2cSerialBus {
+            resource_source: "\\_SB.I2C0",
+            slave_address: 0x50,
+            connection_speed: 400_000,
+            address_10bit: false,
+            consumer: true,
+        };
+        let spi = SpiSerialBus {
+            resource_source: "\\_SB.SPI0",
+            connection_speed: 10_000_000,
+            data_bit_length: 8,
+            clock_phase: SpiClockPhase::First,
+            clock_polarity: SpiClockPolarity::Low,
+            wire_mode: SpiWireMode::FourWire,
+            device_polarity: SpiDevicePolarity::ActiveLow,
+            device_selection: 0,
+            consumer: true,
+        };
+
+        let mut bytes = Vec::new();
+        i2c.to_aml_bytes(&mut bytes);
+        assert_eq!(
+            bytes,
+            b"\x8e\x19\x00\x01\x00\x01\x02\x00\x00\x01\x06\x00\x80\x1a\x06\x00\x50\x00\\_SB.I2C0\x00"
+        );
+
+        bytes.clear();
+        spi.to_aml_bytes(&mut bytes);
+        assert_eq!(
+            bytes,
+            b"\x8e\x1c\x00\x01\x00\x02\x02\x00\x00\x01\x09\x00\x80\x96\x98\x00\x08\x00\x00\x00\x00\\_SB.SPI0\x00"
+        );
     }
 
     #[test]
@@ -2714,6 +3157,47 @@ mod tests {
             builder.to_aml_bytes(&mut aml);
             assert_eq!(expected, aml);
         }
+    }
+
+    #[test]
+    fn test_additional_aml_operations() {
+        let name = Path::new("OBJ0");
+        let local0 = Local(0);
+        let local1 = Local(1);
+
+        let cases: &[(&dyn Aml, &[u8])] = &[
+            (&Break, b"\xa5"),
+            (&RefOf::new(&name), b"\x71OBJ0"),
+            (&Increment::new(&local0), b"\x75\x60"),
+            (&Decrement::new(&local1), b"\x76\x61"),
+            (&Stall::new(&10u8), b"\x5b\x21\x0a\x0a"),
+            (&Sleep::new(&100u8), b"\x5b\x22\x0a\x64"),
+            (&CondRefOf::new(&name, &local0), b"\x5b\x12OBJ0\x60"),
+            (
+                &Divide::new(&10u8, &3u8, &local0, &local1),
+                b"\x78\x0a\x0a\x0a\x03\x60\x61",
+            ),
+            (
+                &ThermalZone::new(Path::new("TZ00"), vec![]),
+                b"\x5b\x85\x05TZ00",
+            ),
+        ];
+
+        for (aml, expected) in cases {
+            let mut bytes = Vec::new();
+            aml.to_aml_bytes(&mut bytes);
+            assert_eq!(&bytes, expected);
+        }
+    }
+
+    #[test]
+    fn test_power_resource() {
+        let power_resource = PowerResource::new(Path::new("PWR0"), 0, 0, vec![]);
+        let mut aml = Vec::new();
+
+        power_resource.to_aml_bytes(&mut aml);
+
+        assert_eq!(aml, b"\x5b\x84\x08PWR0\x00\x00\x00");
     }
 
     #[test]

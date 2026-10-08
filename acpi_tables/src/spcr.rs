@@ -26,10 +26,16 @@ pub struct SPCR<'a> {
 }
 
 impl SPCR<'_> {
-    pub fn sbi(oem_id: [u8; 6], oem_table_id: [u8; 8], oem_revision: u32) -> Self {
+    fn new(
+        oem_id: [u8; 6],
+        oem_table_id: [u8; 8],
+        oem_revision: u32,
+        info: SerialPortInfo,
+    ) -> Self {
         let mut header = TableHeader {
             signature: *b"SPCR",
-            length: (TableHeader::len() as u32).into(),
+            length: ((TableHeader::len() + SerialPortInfo::len() + EMPTY_NAMESPACE.len()) as u32)
+                .into(),
             revision: 4,
             checksum: 0,
             oem_id,
@@ -38,19 +44,38 @@ impl SPCR<'_> {
             creator_id: crate::CREATOR_ID,
             creator_revision: crate::CREATOR_REVISION,
         };
-        let sbi = SerialPortInfo::sbi();
 
-        let mut cksum = Checksum::default();
-        cksum.append(header.as_bytes());
-        cksum.append(sbi.as_bytes());
-        cksum.append(&EMPTY_NAMESPACE);
-        header.checksum = cksum.value();
+        let mut checksum = Checksum::default();
+        checksum.append(header.as_bytes());
+        checksum.append(info.as_bytes());
+        checksum.append(&EMPTY_NAMESPACE);
+        header.checksum = checksum.value();
 
         Self {
             header,
-            info: sbi,
+            info,
             namespace_string: &EMPTY_NAMESPACE,
         }
+    }
+
+    pub fn sbi(oem_id: [u8; 6], oem_table_id: [u8; 8], oem_revision: u32) -> Self {
+        Self::new(oem_id, oem_table_id, oem_revision, SerialPortInfo::sbi())
+    }
+
+    /// Create an SPCR for an ARM PL011 UART using a GIC interrupt.
+    pub fn pl011(
+        oem_id: [u8; 6],
+        oem_table_id: [u8; 8],
+        oem_revision: u32,
+        base_address: u64,
+        gsi: u32,
+    ) -> Self {
+        Self::new(
+            oem_id,
+            oem_table_id,
+            oem_revision,
+            SerialPortInfo::pl011(base_address, gsi),
+        )
     }
 }
 
@@ -160,6 +185,40 @@ impl SerialPortInfo {
             namespace_string_offset: (Self::len() as u16).into(),
         }
     }
+
+    pub fn pl011(base_address: u64, gsi: u32) -> Self {
+        Self {
+            interface_type: SerialPortSubType::ArmPl011 as u8,
+            reserved0: [0; 3],
+            base_address: gas::GAS::new(
+                gas::AddressSpace::SystemMemory,
+                32,
+                0,
+                gas::AccessSize::DwordAccess,
+                base_address,
+            ),
+            interrupt_type: 0x08,
+            irq: 0,
+            gsi: gsi.into(),
+            baud_rate: 7, // 115200 baud
+            parity: 0,
+            stop_bits: 1,
+            flow_control: 0,
+            terminal_type: 0,
+            language: 0,
+            pci_device_id: PCI_DEVICE_ID_NONE.into(),
+            pci_vendor_id: PCI_VENDOR_ID_NONE.into(),
+            pci_bus: 0,
+            pci_device: 0,
+            pci_function: 0,
+            pci_flags: 0.into(),
+            pci_segment: 0,
+            clock_frequency: 0.into(),
+            precise_baud: 0.into(),
+            namespace_string_len: (EMPTY_NAMESPACE.len() as u16).into(),
+            namespace_string_offset: (Self::len() as u16).into(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -177,5 +236,26 @@ mod tests {
         assert_eq!(sum, 0);
         assert_eq!(bytes.len(), TableHeader::len() + SerialPortInfo::len() + 2);
         assert_eq!(bytes[0..4], *b"SPCR");
+        assert_eq!(u32::from_le_bytes(bytes[4..8].try_into().unwrap()), 90);
+    }
+
+    #[test]
+    fn test_pl011_spcr() {
+        let spcr = SPCR::pl011(*b"SSPCRR", *b"SOMETHIN", 1, 0x6000_0000, 33);
+        let mut bytes = Vec::new();
+        spcr.to_aml_bytes(&mut bytes);
+
+        assert_eq!(
+            bytes.iter().fold(0u8, |sum, byte| sum.wrapping_add(*byte)),
+            0
+        );
+        assert_eq!(u32::from_le_bytes(bytes[4..8].try_into().unwrap()), 90);
+        assert_eq!(bytes[36], SerialPortSubType::ArmPl011 as u8);
+        assert_eq!(
+            u64::from_le_bytes(bytes[44..52].try_into().unwrap()),
+            0x6000_0000
+        );
+        assert_eq!(u32::from_le_bytes(bytes[54..58].try_into().unwrap()), 33);
+        assert_eq!(bytes[58], 7);
     }
 }
