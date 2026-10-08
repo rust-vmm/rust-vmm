@@ -1,0 +1,9 @@
+[workspace]
+members = [
+    "vm-superio",
+    "vm-superio-ser",
+]
+
+[workspace.dependencies]
+# rust-vmm crates
+vmm-sys-util = ">=0.12.1,<=0.14.0"
