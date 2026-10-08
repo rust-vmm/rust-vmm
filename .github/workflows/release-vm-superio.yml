@@ -2,20 +2,17 @@ name: Publish vm-superio to crates.io
 
 on:
   push:
-    tags: ['vm-superio-v*']  # Triggers when pushing tags starting with 'vm-superio-v'
+    tags: ['vm-superio-v*']
 
 jobs:
   publish:
     runs-on: ubuntu-latest
-    # environment: release  # Optional: for enhanced security
     permissions:
-      id-token: write     # Required for OIDC token exchange
+      id-token: write
     steps:
     - uses: actions/checkout@v4
     - uses: rust-lang/crates-io-auth-action@v1
       id: auth
-    - run: |
-        cd vm-superio
-        cargo publish
+    - run: cargo publish --package vm-superio
       env:
         CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
