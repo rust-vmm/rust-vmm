@@ -2,6 +2,8 @@
 
 ## Upcoming Release
 
+## v0.14.2
+
 ### Added
 
 - [[#175]](https://github.com/rust-vmm/rust-vmm/pull/175) The x86_64
@@ -11,7 +13,7 @@
 
 ### Changed
 
-- [[381]](https://github.com/rust-vmm/kvm/pull/381)
+- [[#381]](https://github.com/rust-vmm/kvm/pull/381)
   Raised kvm_irq_routing cap to KVM_MAX_IRQ_ROUTES (4096) matching the
   kernel
 - Regenerated the riscv64 `KVM_RISCV_ISA_EXT_ID` enum from Linux
@@ -25,6 +27,9 @@
   from 200 to 512. Real RVA23S64-class hardware with Vector, AIA and
   SBI extensions enabled has been observed to report up to 246
   registers via `KVM_GET_REG_LIST`, above the old cap.
+  kernel and exported it as a public constant.
+- [[#160]](https://github.com/rust-vmm/rust-vmm/pull/160) Repository
+  migrated to the rust-vmm monorepo
 
 ## v0.14.1
 

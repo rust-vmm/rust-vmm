@@ -9,6 +9,8 @@
   correctly-sized buffer, instead of requiring callers to pre-guess a
   size and handle `E2BIG` themselves.
 
+## v0.25.1
+
 ### Changed
 
 - [[#174]](https://github.com/rust-vmm/rust-vmm/pull/174) `VcpuFd::get_one_reg`,
@@ -25,6 +27,9 @@
   `KVM_CAP_ARM_WRITABLE_IMP_ID_REGS` (Linux 6.15), without which writes to the
   implementation ID registers (for example `MIDR_EL1` through a VMM CPU
   template) fail with EINVAL.
+- [[#160]](https://github.com/rust-vmm/rust-vmm/pull/160) Repository
+  migrated to the rust-vmm monorepo
+- Upgrade `kvm-bindings` to `v0.14.2`.
 
 ## v0.25.0
 
