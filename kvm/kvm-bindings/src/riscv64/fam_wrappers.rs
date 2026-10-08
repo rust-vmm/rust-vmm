@@ -8,8 +8,11 @@ use vmm_sys_util::generate_fam_struct_impl;
 use super::bindings::*;
 
 // There is no constant in the kernel as far as the maximum number
-// of registers on RISC-V, but KVM_GET_REG_LIST usually returns around 160.
-const RISCV64_REGS_MAX: usize = 200;
+// of registers on RISC-V. KVM_GET_REG_LIST usually returns around 160,
+// but RVA23S64-class hardware with Vector, AIA and SBI extensions enabled
+// can exceed 200 (observed: 246), so this ceiling is kept generously above
+// any count seen in practice.
+const RISCV64_REGS_MAX: usize = 512;
 
 // Implement the FamStruct trait for kvm_reg_list.
 generate_fam_struct_impl!(kvm_reg_list, u64, reg, u64, n, RISCV64_REGS_MAX);
@@ -67,6 +70,15 @@ mod tests {
     use super::KvmIrqRouting;
     use super::RegList;
     use vmm_sys_util::fam::FamStruct;
+
+    #[test]
+    fn test_reg_list_above_legacy_cap() {
+        // Real RVA23S64-class hardware with Vector, AIA and SBI extensions
+        // enabled has been observed to report up to 246 registers via
+        // KVM_GET_REG_LIST, above the old, too-small 200-entry cap.
+        let wrapper = RegList::new(246).unwrap();
+        assert_eq!(wrapper.as_slice().len(), 246);
+    }
 
     #[test]
     fn test_reg_list_eq() {

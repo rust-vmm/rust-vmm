@@ -2,6 +2,13 @@
 
 ## Upcoming Release
 
+### Added
+
+- Added `VcpuFd::get_reg_list_auto()` on aarch64/riscv64, which probes
+  `KVM_GET_REG_LIST` for the real register count and retries with a
+  correctly-sized buffer, instead of requiring callers to pre-guess a
+  size and handle `E2BIG` themselves.
+
 ## v0.25.1
 
 ### Changed

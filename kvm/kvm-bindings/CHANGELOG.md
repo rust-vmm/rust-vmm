@@ -15,6 +15,18 @@
 
 - [[#381]](https://github.com/rust-vmm/kvm/pull/381)
   Raised kvm_irq_routing cap to KVM_MAX_IRQ_ROUTES (4096) matching the
+  kernel
+- Regenerated the riscv64 `KVM_RISCV_ISA_EXT_ID` enum from Linux
+  v7.3-rc6 UAPI headers, adding `ZICBOP`, `ZFBFMIN`, `ZVFBFMIN`,
+  `ZVFBFWMA`, `ZCLSD`, `ZILSD`, `ZALASR`, `ZICFILP` and `ZICFISS`
+  (IDs 71-79) and bumping `..._MAX` from 71 to 80.
+- Added the missing `zicbop_block_size` trailing field to the riscv64
+  `kvm_riscv_config` struct, matching the kernel's
+  `arch/riscv/include/uapi/asm/kvm.h`.
+- Raised the riscv64 `RegList` capacity ceiling (`RISCV64_REGS_MAX`)
+  from 200 to 512. Real RVA23S64-class hardware with Vector, AIA and
+  SBI extensions enabled has been observed to report up to 246
+  registers via `KVM_GET_REG_LIST`, above the old cap.
   kernel and exported it as a public constant.
 - [[#160]](https://github.com/rust-vmm/rust-vmm/pull/160) Repository
   migrated to the rust-vmm monorepo
