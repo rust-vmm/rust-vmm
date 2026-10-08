@@ -23,6 +23,9 @@ use crate::loader::{Error as KernelLoaderError, KernelLoader, KernelLoaderResult
 /// ARM64 and RISC-V64 Image (PE) format support
 pub struct PE;
 
+#[cfg(target_arch = "aarch64")]
+const ARM64_IMAGE_MAGIC: u32 = u32::from_le_bytes(*b"ARM\x64");
+
 #[derive(Debug, PartialEq, Eq)]
 /// PE kernel loader errors.
 pub enum Error {
@@ -158,7 +161,7 @@ impl KernelLoader for PE {
             .map_err(|_| Error::ReadImageHeader)?;
 
         #[cfg(target_arch = "aarch64")]
-        if u32::from_le(image_header.magic) != 0x644d_5241 {
+        if u32::from_le(image_header.magic) != ARM64_IMAGE_MAGIC {
             return Err(Error::InvalidImageMagicNumber.into());
         }
         #[cfg(target_arch = "riscv64")]
