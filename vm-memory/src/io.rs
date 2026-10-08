@@ -229,7 +229,7 @@ fn read_volatile_raw_fd(
     buf: &mut VolatileSlice<impl BitmapSlice>,
 ) -> Result<usize, VolatileMemoryError> {
     let fd = raw_fd.as_raw_fd();
-    let guard = buf.ptr_guard_mut();
+    let guard = buf.ptr_guard_mut()?;
 
     let dst = guard.as_ptr().cast::<libc::c_void>();
 
@@ -260,7 +260,7 @@ fn write_volatile_raw_fd(
     buf: &VolatileSlice<impl BitmapSlice>,
 ) -> Result<usize, VolatileMemoryError> {
     let fd = raw_fd.as_raw_fd();
-    let guard = buf.ptr_guard();
+    let guard = buf.ptr_guard()?;
 
     let src = guard.as_ptr().cast::<libc::c_void>();
 
@@ -291,7 +291,7 @@ impl WriteVolatile for &mut [u8] {
         // of the memory areas pointed to. The areas do not overlap, since the source is inside guest
         // memory, and the destination is a pointer derived from a slice (no slices to guest memory
         // are possible without violating rust's aliasing rules).
-        let written = unsafe { copy_from_volatile_slice(self.as_mut_ptr(), buf, total) };
+        let written = unsafe { copy_from_volatile_slice(self.as_mut_ptr(), buf, total)? };
 
         // Advance the slice, just like the stdlib: https://doc.rust-lang.org/src/std/io/impls.rs.html#335
         *self = std::mem::take(self).split_at_mut(written).1;
@@ -330,7 +330,7 @@ impl ReadVolatile for &[u8] {
         // of the memory areas pointed to. The areas do not overlap, since the destination is inside
         // guest memory, and the source is a pointer derived from a slice (no slices to guest memory
         // are possible without violating rust's aliasing rules).
-        let read = unsafe { copy_to_volatile_slice(buf, self.as_ptr(), total) };
+        let read = unsafe { copy_to_volatile_slice(buf, self.as_ptr(), total)? };
 
         // Advance the slice, just like the stdlib: https://doc.rust-lang.org/src/std/io/impls.rs.html#232-310
         *self = self.split_at(read).1;
@@ -376,7 +376,7 @@ impl WriteVolatile for Vec<u8> {
         // `len + count` is at most the reserved capacity of the vector. Thus the call to `set_len`
         // is safe.
         unsafe {
-            let copied_len = copy_from_volatile_slice(self.as_mut_ptr().add(len), buf, count);
+            let copied_len = copy_from_volatile_slice(self.as_mut_ptr().add(len), buf, count)?;
 
             assert_eq!(copied_len, count);
             self.set_len(len + count);

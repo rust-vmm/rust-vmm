@@ -325,12 +325,12 @@ pub(crate) mod tests {
 
         let v_ref = m.get_ref::<u64>(get_ref_offset).unwrap();
         assert!(range_is_clean(s1.bitmap(), get_ref_offset, dirty_len));
-        v_ref.store(val);
+        v_ref.store(val).unwrap();
         assert!(range_is_dirty(s1.bitmap(), get_ref_offset, dirty_len));
 
         let arr_ref = m.get_array_ref::<u64>(array_ref_offset, 1).unwrap();
         assert!(range_is_clean(s1.bitmap(), array_ref_offset, dirty_len));
-        arr_ref.store(0, val);
+        arr_ref.store(0, val).unwrap();
         assert!(range_is_dirty(s1.bitmap(), array_ref_offset, dirty_len));
     }
 }

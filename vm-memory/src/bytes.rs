@@ -639,7 +639,7 @@ pub(crate) mod tests {
     fn byte_valued_slice() {
         let a: [u8; 8] = [0, 0, 0, 0, 1, 1, 1, 1];
         let mut s: S = Default::default();
-        s.as_bytes().copy_from(&a);
+        s.as_bytes().copy_from(&a).unwrap();
         assert_eq!(s.a, 0);
         assert_eq!(s.b, 0x0101_0101);
     }
