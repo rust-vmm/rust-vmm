@@ -779,6 +779,53 @@ mod tests {
 
     use vm_memory::{Address, Bytes, GuestAddress, GuestMemoryMmap};
 
+    fn check_reset<Q: QueueT>(q: &mut Q) {
+        q.set_ready(true);
+        q.set_size(8);
+        q.set_next_avail(2);
+        q.set_next_used(4);
+        q.set_event_idx(true);
+        q.set_desc_table_address(Some(0x5000), Some(0));
+        q.set_avail_ring_address(Some(0x6000), Some(0));
+        q.set_used_ring_address(Some(0x7000), Some(0));
+        q.lock().num_added = Wrapping(15);
+
+        assert!(q.ready());
+        assert_eq!(q.size(), 8);
+        assert_eq!(q.next_avail(), 2);
+        assert_eq!(q.next_used(), 4);
+        assert!(q.event_idx_enabled());
+        assert_eq!(q.lock().desc_table, GuestAddress(0x5000));
+        assert_eq!(q.lock().avail_ring, GuestAddress(0x6000));
+        assert_eq!(q.lock().used_ring, GuestAddress(0x7000));
+        assert_eq!(q.lock().num_added, Wrapping(15));
+
+        q.reset();
+
+        assert!(!q.ready());
+        assert_eq!(q.size(), 16);
+        assert_eq!(q.next_avail(), 0);
+        assert_eq!(q.next_used(), 0);
+        assert!(!q.event_idx_enabled());
+        assert_eq!(q.lock().desc_table, GuestAddress(0));
+        assert_eq!(q.lock().avail_ring, GuestAddress(0));
+        assert_eq!(q.lock().used_ring, GuestAddress(0));
+        assert_eq!(q.lock().num_added, Wrapping(0));
+    }
+
+    #[test]
+    fn test_generic_queue_reset() {
+        let mut q = Queue::new(16).unwrap();
+        check_reset(&mut q);
+    }
+
+    #[test]
+    fn test_generic_queue_sync_reset() {
+        let mut q = crate::QueueSync::new(16).unwrap();
+
+        check_reset(&mut q);
+    }
+
     #[test]
     fn test_queue_is_valid() {
         let m = &GuestMemoryMmap::<()>::from_ranges(&[(GuestAddress(0), 0x10000)]).unwrap();
