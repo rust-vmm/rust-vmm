@@ -52,14 +52,14 @@ macro_rules! ioctl_ioc_nr {
     ($name:ident, $dir:expr, $ty:expr, $nr:expr, $size:expr) => {
         #[allow(non_snake_case)]
         #[allow(clippy::cast_lossless)]
-        pub fn $name() -> ::std::os::raw::c_ulong {
+        pub const fn $name() -> ::std::os::raw::c_ulong {
             $crate::ioctl::ioctl_expr($dir, $ty, $nr, $size)
         }
     };
     ($name:ident, $dir:expr, $ty:expr, $nr:expr, $size:expr, $($v:ident),+) => {
         #[allow(non_snake_case)]
         #[allow(clippy::cast_lossless)]
-        pub fn $name($($v: ::std::os::raw::c_uint),+) -> ::std::os::raw::c_ulong {
+        pub const fn $name($($v: ::std::os::raw::c_uint),+) -> ::std::os::raw::c_ulong {
             $crate::ioctl::ioctl_expr($dir, $ty, $nr, $size)
         }
     };
@@ -408,5 +408,15 @@ mod tests {
 
         assert_eq!(0x8080_4522, EVIOCGBIT(2));
         assert_eq!(0x0000_4509, FAKE_IOCTL_2_ARG(3, 5));
+    }
+
+    #[test]
+    fn test_ioctl_macros_const() {
+        // The generated functions are `const fn`, so they can be evaluated in a
+        // const context.
+        const KVM_CREATE_VM_NR: ::std::os::raw::c_ulong = KVM_CREATE_VM();
+        const FAKE_2_ARG_NR: ::std::os::raw::c_ulong = FAKE_IOCTL_2_ARG(3, 5);
+        assert_eq!(0x0000_AE01, KVM_CREATE_VM_NR);
+        assert_eq!(0x0000_4509, FAKE_2_ARG_NR);
     }
 }
