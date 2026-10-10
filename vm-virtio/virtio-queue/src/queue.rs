@@ -815,13 +815,22 @@ mod tests {
 
     #[test]
     fn test_generic_queue_reset() {
-        let mut q = Queue::new(16).unwrap();
+        let mem = GuestMemoryMmap::<()>::from_ranges(&[(GuestAddress(0), 0x10000)]).unwrap();
+
+        let vq = MockSplitQueue::new(&mem, 16);
+
+        let mut q: Queue = vq.create_queue().unwrap();
+
         check_reset(&mut q);
     }
 
     #[test]
     fn test_generic_queue_sync_reset() {
-        let mut q = crate::QueueSync::new(16).unwrap();
+        let mem = GuestMemoryMmap::<()>::from_ranges(&[(GuestAddress(0), 0x10000)]).unwrap();
+
+        let vq = MockSplitQueue::new(&mem, 16);
+
+        let mut q: crate::QueueSync = vq.create_queue().unwrap();
 
         check_reset(&mut q);
     }
