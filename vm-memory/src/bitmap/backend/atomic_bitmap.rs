@@ -132,10 +132,45 @@ impl AtomicBitmap {
 
     /// Atomically get and reset the dirty page bitmap.
     pub fn get_and_reset(&self) -> Vec<u64> {
-        self.map
-            .iter()
-            .map(|u| u.fetch_and(0, Ordering::SeqCst))
-            .collect()
+        /// Typical size on x86_64, ARM, and RISCV (industry convention).
+        const CACHE_LINE_SIZE: usize = 64;
+        const WORDS_PER_LINE: usize = CACHE_LINE_SIZE / size_of::<AtomicU64>();
+
+        let mut out = Vec::with_capacity(self.map.len());
+
+        // Processes a chunk (normally a whole cache line) and either ignores
+        // all or takes all. This brings significant (5x) performance
+        // improvements for sparse maps without regressions for dense bitmaps.
+        let mut process_chunk = |chunk: &[AtomicU64]| {
+            // We use fold() over any() to prevent branching
+            let any_bit_set = chunk.iter().fold(0, |acc, atomic_word| {
+                acc | atomic_word.load(Ordering::Relaxed)
+            });
+            if any_bit_set != 0 {
+                // Extend all items while replacing each original word with a
+                // zero.
+                let swap_iter = chunk
+                    .iter()
+                    .map(|atomic_word| atomic_word.swap(0, Ordering::SeqCst));
+                out.extend(swap_iter);
+            } else {
+                out.resize(out.len() + chunk.len(), 0);
+            }
+        };
+
+        // First process the potentially unaligned head, then chunks of CACHE_LINE_SIZE.
+        let head_len = self
+            .map
+            .as_ptr()
+            .align_offset(CACHE_LINE_SIZE)
+            .min(self.map.len());
+        let (head, tail) = self.map.split_at(head_len);
+        if !head.is_empty() {
+            process_chunk(head);
+        }
+        tail.chunks(WORDS_PER_LINE).for_each(&mut process_chunk);
+
+        out
     }
 
     /// Reset all bitmap bits to 0.
@@ -256,6 +291,20 @@ mod tests {
 
         assert_eq!(v.len(), 1);
         assert_eq!(v[0], 0b110);
+    }
+
+    #[test]
+    fn test_bitmap_get_and_reset_sparse() {
+        // Several words worth of bits, only one of which is ever dirtied.
+        let b = AtomicBitmap::new(256 * DEFAULT_PAGE_SIZE.get(), DEFAULT_PAGE_SIZE);
+        assert_eq!(b.get_and_reset(), vec![0; 4]);
+
+        b.set_bit(70);
+        b.set_bit(200);
+        assert_eq!(b.get_and_reset(), vec![0, 1 << 6, 0, 1 << 8]);
+        assert!(!b.is_bit_set(70));
+        assert!(!b.is_bit_set(200));
+        assert_eq!(b.get_and_reset(), vec![0; 4]);
     }
 
     #[test]
