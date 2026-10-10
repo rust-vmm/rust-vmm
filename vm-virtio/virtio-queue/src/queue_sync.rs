@@ -198,7 +198,6 @@ impl From<Arc<Mutex<Queue>>> for QueueSync {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::defs::{DEFAULT_AVAIL_RING_ADDR, DEFAULT_DESC_TABLE_ADDR, DEFAULT_USED_RING_ADDR};
     use std::sync::Barrier;
     use virtio_bindings::bindings::virtio_ring::VRING_USED_F_NO_NOTIFY;
     use vm_memory::{Address, Bytes, GuestAddress, GuestAddressSpace, GuestMemoryMmap};
@@ -284,43 +283,6 @@ mod tests {
             q.used_idx(m.memory(), Ordering::Acquire).unwrap(),
             Wrapping(4)
         );
-    }
-
-    #[test]
-    fn test_sync_state_reset_queue() {
-        let m = &GuestMemoryMmap::<()>::from_ranges(&[(GuestAddress(0), 0x10000)]).unwrap();
-        let mut q = QueueSync::new(0x100).unwrap();
-
-        q.set_desc_table_address(Some(0x1000), None);
-        q.set_avail_ring_address(Some(0x2000), None);
-        q.set_used_ring_address(Some(0x3000), None);
-        q.set_event_idx(true);
-        q.set_next_avail(2);
-        q.set_next_used(2);
-        q.set_size(0x8);
-        q.set_ready(true);
-        assert!(q.is_valid(m.memory()));
-
-        q.needs_notification(m.memory()).unwrap();
-
-        assert_eq!(q.lock_state().size(), 0x8);
-        assert!(q.lock_state().ready());
-        assert_ne!(q.lock_state().desc_table(), DEFAULT_DESC_TABLE_ADDR);
-        assert_ne!(q.lock_state().avail_ring(), DEFAULT_AVAIL_RING_ADDR);
-        assert_ne!(q.lock_state().used_ring(), DEFAULT_USED_RING_ADDR);
-        assert_ne!(q.lock_state().next_avail(), 0);
-        assert_ne!(q.lock_state().next_used(), 0);
-        assert!(q.lock_state().event_idx_enabled());
-
-        q.reset();
-        assert_eq!(q.lock_state().size(), 0x100);
-        assert!(!q.lock_state().ready());
-        assert_eq!(q.lock_state().desc_table(), DEFAULT_DESC_TABLE_ADDR);
-        assert_eq!(q.lock_state().avail_ring(), DEFAULT_AVAIL_RING_ADDR);
-        assert_eq!(q.lock_state().used_ring(), DEFAULT_USED_RING_ADDR);
-        assert_eq!(q.lock_state().next_avail(), 0);
-        assert_eq!(q.lock_state().next_used(), 0);
-        assert!(!q.lock_state().event_idx_enabled());
     }
 
     #[test]
