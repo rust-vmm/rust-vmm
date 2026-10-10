@@ -8,6 +8,8 @@ members = [
   "kvm/kvm-bindings",
   "kvm/kvm-ioctls",
   "linux-loader",
+  "mshv/mshv-bindings",
+  "mshv/mshv-ioctls",
   "seccompiler",
   "vm-allocator",
   "vm-memory",
