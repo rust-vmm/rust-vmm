@@ -1,8 +1,14 @@
-name: Publish crate to crates.io
+name: Publish rust-vmm crates to crates.io
 
 on:
   push:
     tags:
+      - 'acpi_tables-v*'
+      - 'event-manager-v*'
+      - 'linux-loader-v*'
+      - 'seccompiler-v*'
+      - 'vm-allocator-v*'
+      - 'vm-memory-v*'
       - 'virtio-bindings-v*'
       - 'virtio-blk-v*'
       - 'virtio-console-v*'
@@ -10,6 +16,7 @@ on:
       - 'virtio-queue-v*'
       - 'virtio-queue-ser-v*'
       - 'virtio-vsock-v*'
+      - 'vmm-sys-util-v*'
 
 jobs:
   publish:
