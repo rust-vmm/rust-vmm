@@ -10,7 +10,7 @@
 use libc::eventfd;
 use std::fs::File;
 use std::io::{Read, Write};
-use std::os::fd::IntoRawFd;
+use std::os::fd::{AsFd, BorrowedFd, IntoRawFd};
 use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
 use std::{io, result};
 
@@ -119,6 +119,12 @@ impl EventFd {
     }
 }
 
+impl AsFd for EventFd {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        self.eventfd.as_fd()
+    }
+}
+
 impl AsRawFd for EventFd {
     fn as_raw_fd(&self) -> RawFd {
         self.eventfd.as_raw_fd()
@@ -147,6 +153,18 @@ mod tests {
     fn test_new() {
         EventFd::new(EFD_NONBLOCK).unwrap();
         EventFd::new(0).unwrap();
+    }
+
+    #[test]
+    fn test_as_fd() {
+        let evt = EventFd::new(EFD_NONBLOCK).unwrap();
+        let dup_fd = evt.as_fd().try_clone_to_owned().unwrap();
+        // SAFETY: `dup_fd` dups a descriptor we own, so both ends share the same counter.
+        let dup = unsafe { EventFd::from_raw_fd(dup_fd.into_raw_fd()) };
+
+        evt.write(55).unwrap();
+        assert_eq!(dup.read().unwrap(), 55);
+        assert_ne!(dup.as_raw_fd(), evt.as_raw_fd());
     }
 
     #[test]
