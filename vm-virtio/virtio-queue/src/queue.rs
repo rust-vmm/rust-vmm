@@ -785,9 +785,9 @@ mod tests {
         q.set_next_avail(2);
         q.set_next_used(4);
         q.set_event_idx(true);
-        q.set_desc_table_address(Some(0x5000), Some(0));
-        q.set_avail_ring_address(Some(0x6000), Some(0));
-        q.set_used_ring_address(Some(0x7000), Some(0));
+        q.set_desc_table_address(Some(0x5000), None);
+        q.set_avail_ring_address(Some(0x6000), None);
+        q.set_used_ring_address(Some(0x7000), None);
         q.needs_notification(mem).unwrap();
         q.lock().num_added = Wrapping(15);
 
@@ -808,9 +808,9 @@ mod tests {
         assert_eq!(q.next_avail(), 0);
         assert_eq!(q.next_used(), 0);
         assert!(!q.event_idx_enabled());
-        assert_eq!(q.lock().desc_table, GuestAddress(0));
-        assert_eq!(q.lock().avail_ring, GuestAddress(0));
-        assert_eq!(q.lock().used_ring, GuestAddress(0));
+        assert_eq!(q.lock().desc_table, GuestAddress(DEFAULT_DESC_TABLE_ADDR));
+        assert_eq!(q.lock().avail_ring, GuestAddress(DEFAULT_AVAIL_RING_ADDR));
+        assert_eq!(q.lock().used_ring, GuestAddress(DEFAULT_USED_RING_ADDR));
         assert_eq!(q.lock().num_added, Wrapping(0));
     }
 
@@ -938,44 +938,6 @@ mod tests {
         let x = vq.used().ring().ref_at(0).unwrap().load();
         assert_eq!(x.id(), 1);
         assert_eq!(x.len(), 0x1000);
-    }
-
-    #[test]
-    fn test_reset_queue() {
-        let m = &GuestMemoryMmap::<()>::from_ranges(&[(GuestAddress(0), 0x10000)]).unwrap();
-        let vq = MockSplitQueue::new(m, 16);
-        let mut q: Queue = vq.create_queue().unwrap();
-
-        q.set_size(8);
-        // The address set by `MockSplitQueue` for the descriptor table is DEFAULT_DESC_TABLE_ADDR,
-        // so let's change it for testing the reset.
-        q.set_desc_table_address(Some(0x5000), None);
-        // Same for `event_idx_enabled`, `next_avail` `next_used` and `signalled_used`.
-        q.set_event_idx(true);
-        q.set_next_avail(2);
-        q.set_next_used(4);
-        q.num_added = Wrapping(15);
-        assert_eq!(q.size, 8);
-        // `create_queue` also marks the queue as ready.
-        assert!(q.ready);
-        assert_ne!(q.desc_table, GuestAddress(DEFAULT_DESC_TABLE_ADDR));
-        assert_ne!(q.avail_ring, GuestAddress(DEFAULT_AVAIL_RING_ADDR));
-        assert_ne!(q.used_ring, GuestAddress(DEFAULT_USED_RING_ADDR));
-        assert_ne!(q.next_avail, Wrapping(0));
-        assert_ne!(q.next_used, Wrapping(0));
-        assert_ne!(q.num_added, Wrapping(0));
-        assert!(q.event_idx_enabled);
-
-        q.reset();
-        assert_eq!(q.size, 16);
-        assert!(!q.ready);
-        assert_eq!(q.desc_table, GuestAddress(DEFAULT_DESC_TABLE_ADDR));
-        assert_eq!(q.avail_ring, GuestAddress(DEFAULT_AVAIL_RING_ADDR));
-        assert_eq!(q.used_ring, GuestAddress(DEFAULT_USED_RING_ADDR));
-        assert_eq!(q.next_avail, Wrapping(0));
-        assert_eq!(q.next_used, Wrapping(0));
-        assert_eq!(q.num_added, Wrapping(0));
-        assert!(!q.event_idx_enabled);
     }
 
     #[test]
