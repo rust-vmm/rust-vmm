@@ -779,7 +779,7 @@ mod tests {
 
     use vm_memory::{Address, Bytes, GuestAddress, GuestMemoryMmap};
 
-    fn check_reset<Q: QueueT>(q: &mut Q) {
+    fn check_reset<Q: QueueT>(q: &mut Q, mem: &GuestMemoryMmap<()>) {
         q.set_ready(true);
         q.set_size(8);
         q.set_next_avail(2);
@@ -788,6 +788,7 @@ mod tests {
         q.set_desc_table_address(Some(0x5000), Some(0));
         q.set_avail_ring_address(Some(0x6000), Some(0));
         q.set_used_ring_address(Some(0x7000), Some(0));
+        q.needs_notification(mem).unwrap();
         q.lock().num_added = Wrapping(15);
 
         assert!(q.ready());
@@ -803,7 +804,7 @@ mod tests {
         q.reset();
 
         assert!(!q.ready());
-        assert_eq!(q.size(), 16);
+        assert_eq!(q.size(), q.max_size());
         assert_eq!(q.next_avail(), 0);
         assert_eq!(q.next_used(), 0);
         assert!(!q.event_idx_enabled());
@@ -821,18 +822,20 @@ mod tests {
 
         let mut q: Queue = vq.create_queue().unwrap();
 
-        check_reset(&mut q);
+        check_reset(&mut q, &mem);
     }
 
     #[test]
     fn test_generic_queue_sync_reset() {
         let mem = GuestMemoryMmap::<()>::from_ranges(&[(GuestAddress(0), 0x10000)]).unwrap();
 
-        let vq = MockSplitQueue::new(&mem, 16);
+        let vq = MockSplitQueue::new(&mem, 256);
 
         let mut q: crate::QueueSync = vq.create_queue().unwrap();
 
-        check_reset(&mut q);
+        assert!(q.is_valid(&mem));
+
+        check_reset(&mut q, &mem);
     }
 
     #[test]
