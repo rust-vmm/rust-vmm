@@ -2,6 +2,13 @@
 
 ## Upcoming Release
 
+### Added
+
+- s390x (`s390x-unknown-linux-gnu`) KVM bindings generated with bindgen 0.70.1
+  from Linux v6.15, including `fam-wrappers` and `serde` support aligned with
+  other architectures.
+
+
 ## v0.14.2
 
 ### Added
