@@ -42,6 +42,8 @@ rust-vmm crates in the root organization [rust-vmm](https://github.com/rust-vmm)
 - [linux-loader](linux-loader): Linux kernel image loading crate.
 - [vm-allocator](vm-allocator): Allocation and release strategies for the
   resources a VMM needs, such as MMIO/PIO addresses, GSI numbers and device IDs.
+- [vm-device](vm-device): Device traits and a device manager for operating
+  devices and dispatching I/O on PIO and MMIO buses.
 - [vmm-sys-util](vmm-sys-util): Helpers and utilities used by multiple rust-vmm
   components.
 - [vm-memory](vm-memory): Virtual machine's guest memory crate.
