@@ -12,6 +12,8 @@ members = [
   "vm-allocator",
   "vm-device",
   "vm-memory",
+  "vm-superio/vm-superio",
+  "vm-superio/vm-superio-ser",
   "vmm-sys-util",
   "vm-virtio/virtio-bindings",
   "vm-virtio/virtio-blk",
