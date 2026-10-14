@@ -9,7 +9,11 @@
 
 use bitflags::bitflags;
 use libc::{c_int, c_void, _SC_PAGESIZE, MAP_SHARED};
-use std::{io, mem::size_of, os::raw::c_ulong, os::unix::io::AsRawFd, ptr::null_mut, result};
+use std::os::fd::RawFd;
+use std::{
+    io, mem::size_of, os::fd::OwnedFd, os::raw::c_ulong, os::unix::io::AsRawFd,
+    os::unix::io::FromRawFd, ptr::null_mut, result,
+};
 
 use vmm_sys_util::{
     fam::{Error as FamError, FamStruct, FamStructWrapper},
@@ -55,6 +59,12 @@ pub enum Error {
     /// Fam error.
     #[error("Fam error: {0}")]
     Fam(FamError),
+    /// The `GNTDEV_DMABUF_EXP_FROM_REFS` ioctl returned an error.
+    #[error("{0}")]
+    DmaBufExport(io::Error),
+    /// DMA-BUF not supported with this mapping method.
+    #[error("DMA-BUF not supported with this mapping method")]
+    DmaBufNotSupported,
     /// Unexpected error.
     #[error("Unexpected error")]
     UnexpectedError,
@@ -322,6 +332,10 @@ impl<B: Bitmap> MmapRegion<B> {
         false
     }
 
+    pub(crate) fn export_dma_buf(&self, page_addrs: Vec<u64>) -> Result<GrantDmaBuf> {
+        self.mmap.mmap.export_dma_buf(page_addrs)
+    }
+
     /// Set the hugetlbfs of the region
     pub fn set_hugetlbfs(&mut self, hugetlbfs: bool) {
         self.hugetlbfs = Some(hugetlbfs)
@@ -508,6 +522,9 @@ fn validate_file(file_offset: &Option<FileOffset>) -> Result<(i32, u64)> {
 trait MmapXenTrait: std::fmt::Debug {
     fn mmap_slice(&self, addr: *const u8, prot: i32, len: usize) -> Result<MmapXenSlice>;
     fn addr(&self) -> *mut u8;
+    fn export_dma_buf(&self, _page_addrs: Vec<u64>) -> Result<GrantDmaBuf> {
+        Err(Error::DmaBufNotSupported)
+    }
 }
 
 // Standard Unix memory mapping for testing other crates.
@@ -757,6 +774,75 @@ impl GntDevUnmapGrantRef {
     }
 }
 
+// Create DMA-BUF from grant refs
+//
+// include/uapi/xen/gntdev.h: `ioctl_gntdev_dmabuf_exp_from_refs`
+#[repr(C)]
+#[derive(Debug, Default)]
+struct GntDevDmabufExpFromRefs {
+    // Specific options for this dma-buf: see GNTDEV_DMA_FLAG_XXX.
+    flags: u32,
+    // Number of grant references in @refs array.
+    count: u32,
+    // File descriptor of the dma-buf.
+    fd: u32,
+    // The domain ID of the grant references to be mapped.
+    domid: u32,
+    // Array of grant references, of size @count.
+    refs: __IncompleteArrayField<u32>,
+}
+
+generate_fam_struct_impl!(GntDevDmabufExpFromRefs, u32, refs, u32, count, usize::MAX);
+
+type GntDevDmabufExpFromRefsWrapper = FamStructWrapper<GntDevDmabufExpFromRefs>;
+
+impl GntDevDmabufExpFromRefs {
+    fn new(domid: u32, page_addrs: Vec<u64>) -> Result<GntDevDmabufExpFromRefsWrapper> {
+        let mut wrapper =
+            GntDevDmabufExpFromRefsWrapper::new(page_addrs.len()).map_err(Error::Fam)?;
+
+        {
+            let page_size = page_size();
+            let refs = wrapper.as_mut_slice();
+
+            // GntDevDmabufExpFromRefs's refs are initialized to 0 by Fam layer.
+            for (r, addr) in refs
+                .iter_mut()
+                .take(page_addrs.len())
+                .zip(page_addrs.into_iter())
+            {
+                let base = ((addr & !XEN_GRANT_ADDR_OFF) / page_size) as u32;
+                *r = base as u32;
+            }
+        }
+
+        {
+            let header = unsafe { wrapper.as_mut_fam_struct() };
+            header.domid = domid;
+        }
+
+        Ok(wrapper)
+    }
+}
+
+// Release DMA-BUF created from grant refs
+//
+// include/uapi/xen/gntdev.h: `ioctl_gntdev_dmabuf_exp_wait_released`
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+struct GntDevDmabufExpWaitReleased {
+    // File descriptor of the dma-buf.
+    fd: u32,
+    // Wait timeout in milliseconds.
+    wait_to_ms: u32,
+}
+
+impl GntDevDmabufExpWaitReleased {
+    fn new(fd: u32, wait_to_ms: u32) -> Self {
+        Self { fd, wait_to_ms }
+    }
+}
+
 const XEN_GNTDEV_TYPE: u32 = 'G' as u32;
 
 // #define IOCTL_GNTDEV_MAP_GRANT_REF _IOC(_IOC_NONE, 'G', 0, sizeof(ioctl_gntdev_map_grant_ref))
@@ -776,6 +862,26 @@ fn ioctl_gntdev_unmap_grant_ref() -> c_ulong {
         XEN_GNTDEV_TYPE,
         1,
         size_of::<GntDevUnmapGrantRef>() as u32,
+    )
+}
+
+// #define IOCTL_GNTDEV_DMABUF_EXP_FROM_REFS _IOC(_IOC_NONE, 'G', 9, sizeof(struct ioctl_gntdev_dmabuf_exp_from_refs))
+fn ioctl_gntdev_dmabuf_exp_from_refs() -> c_ulong {
+    ioctl_expr(
+        _IOC_NONE,
+        XEN_GNTDEV_TYPE,
+        9,
+        (size_of::<GntDevDmabufExpFromRefs>() + size_of::<u32>()) as u32,
+    )
+}
+
+// #define IOCTL_GNTDEV_DMABUF_EXP_WAIT_RELEASED _IOC(_IOC_NONE, 'G', 10, sizeof(struct ioctl_gntdev_dmabuf_exp_wait_released))
+fn ioctl_gntdev_dmabuf_exp_wait_released() -> c_ulong {
+    ioctl_expr(
+        _IOC_NONE,
+        XEN_GNTDEV_TYPE,
+        10,
+        size_of::<GntDevDmabufExpWaitReleased>() as u32,
     )
 }
 
@@ -873,6 +979,41 @@ impl MmapXenGrant {
     }
 }
 
+#[derive(Debug)]
+/// A guard struct for an exported grant DMA-BUF file descriptor,
+/// which allows waiting for it to be released.
+pub struct GrantDmaBuf {
+    buf: OwnedFd,
+    gntdev: RawFd,
+}
+
+impl GrantDmaBuf {
+    /// Block and wait until the grant is no longer used.
+    ///
+    /// Unfortunately this includes having *this* descriptor open, so
+    /// the only way for this to return is to close the raw FD from
+    /// one thread *after* another thread has started waiting, so
+    /// you cannot retry the wait multiple times (!)
+    pub fn wait_released(&self, ms: u32) -> bool {
+        let wrapper = GntDevDmabufExpWaitReleased::new(self.buf.as_raw_fd() as u32, ms);
+        // XXX: Technically not guaranteed that gntdev fd is still alive..
+        let ret = unsafe {
+            ioctl_with_ref(
+                &self.gntdev,
+                ioctl_gntdev_dmabuf_exp_wait_released(),
+                &wrapper,
+            )
+        };
+        ret == 0
+    }
+}
+
+impl AsRawFd for GrantDmaBuf {
+    fn as_raw_fd(&self) -> RawFd {
+        self.buf.as_raw_fd()
+    }
+}
+
 impl MmapXenTrait for MmapXenGrant {
     // Maps a slice out of the entire region.
     fn mmap_slice(&self, addr: *const u8, prot: i32, len: usize) -> Result<MmapXenSlice> {
@@ -884,6 +1025,22 @@ impl MmapXenTrait for MmapXenGrant {
             unix_mmap.addr()
         } else {
             null_mut()
+        }
+    }
+
+    fn export_dma_buf(&self, page_addrs: Vec<u64>) -> Result<GrantDmaBuf> {
+        let wrapper = GntDevDmabufExpFromRefs::new(self.domid, page_addrs)?;
+        let reference = wrapper.as_fam_struct_ref();
+
+        let ret = unsafe { ioctl_with_ref(self, ioctl_gntdev_dmabuf_exp_from_refs(), reference) };
+
+        if ret == 0 {
+            Ok(GrantDmaBuf {
+                gntdev: self.as_raw_fd(),
+                buf: unsafe { OwnedFd::from_raw_fd(reference.fd as RawFd) },
+            })
+        } else {
+            Err(Error::DmaBufExport(io::Error::last_os_error()))
         }
     }
 }
