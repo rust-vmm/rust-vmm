@@ -5,12 +5,21 @@
 ### Added
 
 - [[#254](https://github.com/rust-vmm/vmm-sys-util/pull/254)]: Support `TFD_NONBLOCK` for `timerfd::TimerFd`.
+- [[#131](https://github.com/rust-vmm/rust-vmm/pull/131)]:
+  - Impl `AsFd` for all the fd owning types: `linux::eventfd::EventFd`,
+    `linux::timerfd::TimerFd`, `linux::epoll::Epoll`,
+    `linux::poll::EpollContext`, `linux::poll::PollContext`,
+    `unix::event::EventNotifier` and `unix::event::EventConsumer`.
+  - Impl `IntoRawFd` for `linux::epoll::Epoll`.
 
 ### Changed
 
 - [[#25](https://github.com/rust-vmm/vmm-sys-util/issues/25)]: Mark
   `linux::aio::IoContext::submit` as unsafe to reflect that callers must uphold
   the safety requirements for submitted buffers.
+- [[#131](https://github.com/rust-vmm/rust-vmm/pull/131)]: `linux::epoll::Epoll`
+  now owns its descriptor through `OwnedFd` instead of a raw fd closed by a
+  hand-written `Drop`, which makes it I/O safe.
 
 ## v0.15.0
 

@@ -5,7 +5,8 @@
 //! [`epoll`](http://man7.org/linux/man-pages/man7/epoll.7.html) API.
 
 use std::io;
-use std::ops::{Deref, Drop};
+use std::ops::Deref;
+use std::os::fd::{AsFd, BorrowedFd, FromRawFd, IntoRawFd, OwnedFd};
 use std::os::unix::io::{AsRawFd, RawFd};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -195,7 +196,7 @@ impl EpollEvent {
 /// Wrapper over epoll functionality.
 #[derive(Debug)]
 pub struct Epoll {
-    epoll_fd: RawFd,
+    epoll_fd: OwnedFd,
 }
 
 impl Epoll {
@@ -206,7 +207,10 @@ impl Epoll {
             unsafe { epoll_create1(EPOLL_CLOEXEC) },
         )
         .into_result()?;
-        Ok(Epoll { epoll_fd })
+        Ok(Epoll {
+            // SAFETY: `epoll_create1` succeeded, so the kernel gave us a descriptor that we own.
+            epoll_fd: unsafe { OwnedFd::from_raw_fd(epoll_fd) },
+        })
     }
 
     /// Wrapper for `libc::epoll_ctl`.
@@ -250,7 +254,7 @@ impl Epoll {
             // to watch, as well as a valid epoll_event structure. We also check the return value.
             unsafe {
                 epoll_ctl(
-                    self.epoll_fd,
+                    self.epoll_fd.as_raw_fd(),
                     operation as i32,
                     fd,
                     &event as *const EpollEvent as *mut epoll_event,
@@ -300,7 +304,7 @@ impl Epoll {
             // We also check the return value.
             unsafe {
                 epoll_wait(
-                    self.epoll_fd,
+                    self.epoll_fd.as_raw_fd(),
                     events.as_mut_ptr() as *mut epoll_event,
                     events.len() as i32,
                     timeout,
@@ -313,19 +317,21 @@ impl Epoll {
     }
 }
 
-impl AsRawFd for Epoll {
-    fn as_raw_fd(&self) -> RawFd {
-        self.epoll_fd
+impl AsFd for Epoll {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        self.epoll_fd.as_fd()
     }
 }
 
-impl Drop for Epoll {
-    fn drop(&mut self) {
-        // SAFETY: Safe because this fd is opened with `epoll_create` and we trust
-        // the kernel to give us a valid fd.
-        unsafe {
-            libc::close(self.epoll_fd);
-        }
+impl AsRawFd for Epoll {
+    fn as_raw_fd(&self) -> RawFd {
+        self.epoll_fd.as_raw_fd()
+    }
+}
+
+impl IntoRawFd for Epoll {
+    fn into_raw_fd(self) -> RawFd {
+        self.epoll_fd.into_raw_fd()
     }
 }
 
@@ -361,7 +367,7 @@ mod tests {
         const EVENT_BUFFER_SIZE: usize = 128;
 
         let epoll = Epoll::new().unwrap();
-        assert_eq!(epoll.epoll_fd, epoll.as_raw_fd());
+        assert_eq!(epoll.epoll_fd.as_raw_fd(), epoll.as_raw_fd());
 
         // Let's test different scenarios for `epoll_ctl()` and `epoll_wait()` functionality.
 
@@ -495,5 +501,37 @@ mod tests {
                 EpollEvent::default()
             )
             .is_err());
+    }
+
+    #[test]
+    fn test_as_fd_and_into_raw_fd() {
+        let epoll = Epoll::new().unwrap();
+        assert_eq!(epoll.as_fd().as_raw_fd(), epoll.as_raw_fd());
+
+        let fd = epoll.into_raw_fd();
+        // `into_raw_fd` transfers the ownership to the caller, so the fd must still be open.
+        // SAFETY: `fcntl` only queries the descriptor and we check the return value.
+        assert_ne!(unsafe { libc::fcntl(fd, libc::F_GETFD) }, -1);
+        // SAFETY: we own `fd` since `into_raw_fd`, so this restores the automatic cleanup.
+        drop(unsafe { OwnedFd::from_raw_fd(fd) });
+    }
+
+    #[test]
+    fn test_drop_closes_fd() {
+        // SAFETY: `rlim` is a local that we own and we check the return value.
+        let fd_limit = unsafe {
+            let mut rlim = libc::rlimit {
+                rlim_cur: 0,
+                rlim_max: 0,
+            };
+            assert_eq!(libc::getrlimit(libc::RLIMIT_NOFILE, &mut rlim), 0);
+            rlim.rlim_cur
+        };
+
+        // Only one descriptor is held at a time, so this can only exhaust the limit if `Epoll`
+        // leaked descriptors instead of closing them on drop.
+        for _ in 0..fd_limit.min(100_000) + 1 {
+            Epoll::new().expect("epoll_create1 failed");
+        }
     }
 }
