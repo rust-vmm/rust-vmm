@@ -1,5 +1,5 @@
 {
-  "coverage_score": 90.42,
-  "crate_features": "pe",
+  "coverage_score": 86.76,
+  "crate_features": "elf,pe",
   "exclude_path": "benches/"
 }

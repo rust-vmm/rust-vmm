@@ -1,3 +1,14 @@
+# Upcoming Release
+
+## Added
+- [[#122](https://github.com/rust-vmm/rust-vmm/pull/122)] Add ELF loading support for aarch64 and riscv64
+
+## Changed
+- [[#122](https://github.com/rust-vmm/rust-vmm/pull/122)] moved `load_dtb` from `linux_loader::loader::pe`
+  to `linux_loader::loader` to allow using it with just the `elf` feature enabled. It was already re-exported
+  from here, but users accessing it through the old path must now migrate to the new location. Enum variants
+  on `linux_loader::loader::pe::Error` related to loading DTBs were moved to `linux_loader::loader::Error`.
+
 # [v0.14.0]
 
 ## Fixed
