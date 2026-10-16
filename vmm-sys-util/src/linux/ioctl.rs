@@ -39,27 +39,32 @@ pub const fn ioctl_expr(
 
 /// Declare a function that returns an ioctl number.
 ///
+/// The generated function is a `const fn`, so the ioctl number can also be
+/// evaluated in a const context.
+///
 /// ```
-/// # use std::os::raw::c_uint;
+/// # use std::os::raw::{c_uint, c_ulong};
 /// use vmm_sys_util::ioctl::_IOC_NONE;
 /// use vmm_sys_util::ioctl_ioc_nr;
 ///
 /// const KVMIO: c_uint = 0xAE;
 /// ioctl_ioc_nr!(KVM_CREATE_VM, _IOC_NONE, KVMIO, 0x01, 0);
+///
+/// const KVM_CREATE_VM_NR: c_ulong = KVM_CREATE_VM();
 /// ```
 #[macro_export]
 macro_rules! ioctl_ioc_nr {
     ($name:ident, $dir:expr, $ty:expr, $nr:expr, $size:expr) => {
         #[allow(non_snake_case)]
         #[allow(clippy::cast_lossless)]
-        pub fn $name() -> ::std::os::raw::c_ulong {
+        pub const fn $name() -> ::std::os::raw::c_ulong {
             $crate::ioctl::ioctl_expr($dir, $ty, $nr, $size)
         }
     };
     ($name:ident, $dir:expr, $ty:expr, $nr:expr, $size:expr, $($v:ident),+) => {
         #[allow(non_snake_case)]
         #[allow(clippy::cast_lossless)]
-        pub fn $name($($v: ::std::os::raw::c_uint),+) -> ::std::os::raw::c_ulong {
+        pub const fn $name($($v: ::std::os::raw::c_uint),+) -> ::std::os::raw::c_ulong {
             $crate::ioctl::ioctl_expr($dir, $ty, $nr, $size)
         }
     };
@@ -67,12 +72,17 @@ macro_rules! ioctl_ioc_nr {
 
 /// Declare an ioctl that transfers no data.
 ///
+/// The generated function is a `const fn`, so the ioctl number can also be
+/// evaluated in a const context.
+///
 /// ```
-/// # use std::os::raw::c_uint;
+/// # use std::os::raw::{c_uint, c_ulong};
 /// use vmm_sys_util::ioctl_io_nr;
 ///
 /// const KVMIO: c_uint = 0xAE;
 /// ioctl_io_nr!(KVM_CREATE_VM, KVMIO, 0x01);
+///
+/// const KVM_CREATE_VM_NR: c_ulong = KVM_CREATE_VM();
 /// ```
 #[macro_export]
 macro_rules! ioctl_io_nr {
@@ -86,11 +96,16 @@ macro_rules! ioctl_io_nr {
 
 /// Declare an ioctl that reads data.
 ///
+/// The generated function is a `const fn`, so the ioctl number can also be
+/// evaluated in a const context.
+///
 /// ```
 /// use vmm_sys_util::ioctl_ior_nr;
 ///
 /// const TUNTAP: ::std::os::raw::c_uint = 0x54;
 /// ioctl_ior_nr!(TUNGETFEATURES, TUNTAP, 0xcf, ::std::os::raw::c_uint);
+///
+/// const TUNGETFEATURES_NR: ::std::os::raw::c_ulong = TUNGETFEATURES();
 /// ```
 #[macro_export]
 macro_rules! ioctl_ior_nr {
@@ -117,11 +132,16 @@ macro_rules! ioctl_ior_nr {
 
 /// Declare an ioctl that writes data.
 ///
+/// The generated function is a `const fn`, so the ioctl number can also be
+/// evaluated in a const context.
+///
 /// ```
 /// use vmm_sys_util::ioctl_iow_nr;
 ///
 /// const TUNTAP: ::std::os::raw::c_uint = 0x54;
 /// ioctl_iow_nr!(TUNSETQUEUE, TUNTAP, 0xd9, ::std::os::raw::c_int);
+///
+/// const TUNSETQUEUE_NR: ::std::os::raw::c_ulong = TUNSETQUEUE();
 /// ```
 #[macro_export]
 macro_rules! ioctl_iow_nr {
@@ -148,11 +168,16 @@ macro_rules! ioctl_iow_nr {
 
 /// Declare an ioctl that reads and writes data.
 ///
+/// The generated function is a `const fn`, so the ioctl number can also be
+/// evaluated in a const context.
+///
 /// ```
 /// use vmm_sys_util::ioctl_iowr_nr;
 ///
 /// const VHOST: ::std::os::raw::c_uint = 0xAF;
 /// ioctl_iowr_nr!(VHOST_GET_VRING_BASE, VHOST, 0x12, ::std::os::raw::c_int);
+///
+/// const VHOST_GET_VRING_BASE_NR: ::std::os::raw::c_ulong = VHOST_GET_VRING_BASE();
 /// ```
 #[macro_export]
 macro_rules! ioctl_iowr_nr {
@@ -408,5 +433,15 @@ mod tests {
 
         assert_eq!(0x8080_4522, EVIOCGBIT(2));
         assert_eq!(0x0000_4509, FAKE_IOCTL_2_ARG(3, 5));
+    }
+
+    #[test]
+    fn test_ioctl_macros_const() {
+        // The generated functions are `const fn`, so they can be evaluated in a
+        // const context.
+        const KVM_CREATE_VM_NR: ::std::os::raw::c_ulong = KVM_CREATE_VM();
+        const FAKE_2_ARG_NR: ::std::os::raw::c_ulong = FAKE_IOCTL_2_ARG(3, 5);
+        assert_eq!(0x0000_AE01, KVM_CREATE_VM_NR);
+        assert_eq!(0x0000_4509, FAKE_2_ARG_NR);
     }
 }
