@@ -354,10 +354,7 @@ impl InnerNode {
                 // Search the node in the interval tree that contains the
                 // desired starting address.
                 let node = self
-                    .search_superset(&RangeInclusive::new(
-                        start_address,
-                        start_address.checked_add(1).ok_or(Error::Overflow)?,
-                    )?)
+                    .search_superset(&RangeInclusive::new(start_address, start_address)?)
                     .ok_or(Error::ResourceNotAvailable)?;
                 let end_address = start_address
                     .checked_add(constraint.size().checked_sub(1).ok_or(Error::Underflow)?)
@@ -1014,6 +1011,16 @@ mod tests {
         assert_eq!(
             tree.allocate(constraint).unwrap_err(),
             Error::ResourceNotAvailable
+        );
+    }
+
+    #[test]
+    fn test_exact_match_last_address() {
+        let mut tree = IntervalTree::new(RangeInclusive::new(0x1000, 0x1FFF).unwrap());
+        let constraint = Constraint::new(0x1, 0x1, AllocPolicy::ExactMatch(0x1FFF)).unwrap();
+        assert_eq!(
+            tree.allocate(constraint).unwrap(),
+            RangeInclusive::new(0x1FFF, 0x1FFF).unwrap()
         );
     }
 }
