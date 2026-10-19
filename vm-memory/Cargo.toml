@@ -14,11 +14,11 @@ autobenches = false
 [features]
 default = ["rawfd"]
 backend-bitmap = ["dep:libc", "dep:winapi"]
-backend-mmap = ["dep:libc", "dep:winapi"]
+backend-mmap = ["dep:libc", "dep:winapi", "vmm-sys-util"]
 backend-atomic = ["arc-swap"]
 iommu = ["dep:rangemap"]
 rawfd = ["dep:libc"]
-xen = ["backend-mmap", "bitflags", "vmm-sys-util"]
+xen = ["backend-mmap", "bitflags"]
 
 [dependencies]
 libc = { version = "0.2.39", optional = true }
