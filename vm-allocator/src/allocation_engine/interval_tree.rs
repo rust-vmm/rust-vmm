@@ -363,9 +363,9 @@ impl InnerNode {
                     .checked_add(constraint.size().checked_sub(1).ok_or(Error::Underflow)?)
                     .ok_or(Error::Overflow)?;
                 // We should check that starting from the desired address the
-                // whole memory slot will fit in the selected node.
+                // whole memory slot will fit in the selected free node.
                 let range = RangeInclusive::new(start_address, end_address)?;
-                if !node.key.contains(&range) {
+                if !node.node_state.is_free() || !node.key.contains(&range) {
                     return Err(Error::ResourceNotAvailable);
                 }
                 Ok((node, range))
@@ -1003,5 +1003,17 @@ mod tests {
         .unwrap();
         let res = tree.allocate(constraint);
         assert_eq!(res.unwrap_err(), Error::Overflow);
+    }
+
+    #[test]
+    fn test_exact_match_inside_allocated() {
+        let mut tree = IntervalTree::new(RangeInclusive::new(0x1000, 0x1FFF).unwrap());
+        tree.allocate(Constraint::new(0x800, 0x100, AllocPolicy::FirstMatch).unwrap())
+            .unwrap();
+        let constraint = Constraint::new(0x100, 0x100, AllocPolicy::ExactMatch(0x1200)).unwrap();
+        assert_eq!(
+            tree.allocate(constraint).unwrap_err(),
+            Error::ResourceNotAvailable
+        );
     }
 }
