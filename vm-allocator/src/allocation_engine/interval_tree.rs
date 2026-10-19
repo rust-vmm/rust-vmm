@@ -606,22 +606,18 @@ impl IntervalTree {
         // If the deleted RangeInclusive did not start at 0 we try to find range that
         // are placed to its left so we can merge them together.
         if range.start() > 0 {
-            if let Some(node) = self.search_superset(&RangeInclusive::new(
-                range.start().checked_sub(2).ok_or(Error::Underflow)?,
-                range.start().checked_sub(1).ok_or(Error::Underflow)?,
-            )?) {
+            let left = range.start() - 1;
+            if let Some(node) = self.search_superset(&RangeInclusive::new(left, left)?) {
                 if node.node_state == NodeState::Free {
                     range = RangeInclusive::new(node.key.start(), range.end())?;
                 }
             }
         }
         // If the deleted range did not end at u64::MAX we try to find ranges
-        // that are placed to its left so we can merge them together.
+        // that are placed to its right so we can merge them together.
         if range.end() < u64::MAX {
-            if let Some(node) = self.search_superset(&RangeInclusive::new(
-                range.end().checked_add(1).ok_or(Error::Overflow)?,
-                range.end().checked_add(2).ok_or(Error::Overflow)?,
-            )?) {
+            let right = range.end() + 1;
+            if let Some(node) = self.search_superset(&RangeInclusive::new(right, right)?) {
                 if node.node_state == NodeState::Free {
                     range = RangeInclusive::new(range.start(), node.key.end())?;
                 }
@@ -1021,6 +1017,42 @@ mod tests {
         assert_eq!(
             tree.allocate(constraint).unwrap(),
             RangeInclusive::new(0x1FFF, 0x1FFF).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_free_merge_single_address_neighbors() {
+        let mut tree = IntervalTree::new(RangeInclusive::new(0x10, 0x12).unwrap());
+        let a = tree
+            .allocate(Constraint::new(0x1, 0x1, AllocPolicy::FirstMatch).unwrap())
+            .unwrap();
+        let b = tree
+            .allocate(Constraint::new(0x1, 0x1, AllocPolicy::FirstMatch).unwrap())
+            .unwrap();
+        let c = tree
+            .allocate(Constraint::new(0x1, 0x1, AllocPolicy::FirstMatch).unwrap())
+            .unwrap();
+        tree.free(&a).unwrap();
+        tree.free(&c).unwrap();
+        tree.free(&b).unwrap();
+        assert_eq!(
+            tree.allocate(Constraint::new(0x3, 0x1, AllocPolicy::FirstMatch).unwrap())
+                .unwrap(),
+            RangeInclusive::new(0x10, 0x12).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_free_range_starting_at_one() {
+        let mut tree = IntervalTree::new(RangeInclusive::new(0x1, 0x10).unwrap());
+        let range = tree
+            .allocate(Constraint::new(0x10, 0x1, AllocPolicy::FirstMatch).unwrap())
+            .unwrap();
+        tree.free(&range).unwrap();
+        assert_eq!(
+            tree.allocate(Constraint::new(0x10, 0x1, AllocPolicy::FirstMatch).unwrap())
+                .unwrap(),
+            range
         );
     }
 }
