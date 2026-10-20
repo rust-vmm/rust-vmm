@@ -1,0 +1,11 @@
+{
+  "tests": [
+    {
+      "test_name": "prove-virtio-queue",
+      "command": "cargo kani --package virtio-queue",
+      "platform": ["x86_64", "aarch64"],
+      "timeout_in_minutes": 30,
+      "if_changed": ["vm-virtio/virtio-queue/**", "vm-memory/**"]
+    }
+  ]
+}
