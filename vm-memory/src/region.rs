@@ -140,7 +140,7 @@ pub trait GuestMemoryRegion: Bytes<MemoryRegionAddress, E = GuestMemoryError> {
     ///     .get_ref::<u32>(0x200)
     ///     .expect("Could not get reference");
     /// r.store(v);
-    /// assert_eq!(r.load(), v);
+    /// assert_eq!(r.load().unwrap(), v);
     /// # }
     /// ```
     fn as_volatile_slice(&self) -> Result<VolatileSlice<'_, BS<'_, Self::B>>> {
