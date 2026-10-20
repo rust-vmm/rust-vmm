@@ -81,18 +81,45 @@ impl AtomicBitmap {
         let first_bit = start_addr / self.page_size;
         // Handle input ranges where `start_addr + len - 1` would otherwise overflow an `usize`
         // by ignoring pages at invalid addresses.
-        let last_bit = start_addr.saturating_add(len - 1) / self.page_size;
-        for n in first_bit..=last_bit {
-            if n >= self.size {
-                // Attempts to set bits beyond the end of the bitmap are simply ignored.
-                break;
-            }
-            if set {
-                self.map[n >> 6].fetch_or(1 << (n & 63), Ordering::SeqCst);
-            } else {
-                self.map[n >> 6].fetch_and(!(1 << (n & 63)), Ordering::SeqCst);
-            }
+        if first_bit >= self.size {
+            // Attempts to update bits beyond the end of the bitmap are simply ignored.
+            return;
         }
+        let last_bit = (start_addr.saturating_add(len - 1) / self.page_size).min(self.size - 1);
+
+        if first_bit == last_bit {
+            if set {
+                self.map[first_bit >> 6].fetch_or(1 << (first_bit & 63), Ordering::SeqCst);
+            } else {
+                self.map[first_bit >> 6].fetch_and(!(1 << (first_bit & 63)), Ordering::SeqCst);
+            }
+            return;
+        }
+
+        let first_map_index = first_bit >> 6;
+        let last_map_index = last_bit >> 6;
+
+        let update = |map: &AtomicU64, mask| {
+            if set {
+                map.fetch_or(mask, Ordering::SeqCst);
+            } else {
+                map.fetch_and(!mask, Ordering::SeqCst);
+            }
+        };
+
+        let first_mask = u64::MAX << (first_bit & 63);
+        let last_mask = u64::MAX >> (63 - (last_bit & 63));
+
+        if first_map_index == last_map_index {
+            update(&self.map[first_map_index], first_mask & last_mask);
+            return;
+        }
+
+        update(&self.map[first_map_index], first_mask);
+        for map in &self.map[first_map_index + 1..last_map_index] {
+            update(map, u64::MAX);
+        }
+        update(&self.map[last_map_index], last_mask);
     }
 
     /// Reset a range of `len` bytes starting at `start_addr`. The first bit set in the bitmap
@@ -277,6 +304,11 @@ mod tests {
 
     #[test]
     fn test_bitmap_out_of_range() {
+        let empty = AtomicBitmap::new(0, NonZeroUsize::MIN);
+        empty.set_addr_range(0, usize::MAX);
+        empty.reset_addr_range(0, usize::MAX);
+        assert!(empty.get_and_reset().is_empty());
+
         let b = AtomicBitmap::new(1024, NonZeroUsize::MIN);
         // Set a partial range that goes beyond the end of the bitmap
         b.set_addr_range(768, 512);
@@ -284,6 +316,24 @@ mod tests {
         // The bitmap is never set beyond its end.
         assert!(!b.is_addr_set(1024));
         assert!(!b.is_addr_set(1152));
+    }
+
+    #[test]
+    fn test_bitmap_range_across_map_entries() {
+        let b = AtomicBitmap::new(192, NonZeroUsize::MIN);
+
+        b.set_addr_range(60, 73);
+        assert_eq!(
+            b.get_and_reset(),
+            vec![0xf000_0000_0000_0000, u64::MAX, 0x1f]
+        );
+
+        b.set_addr_range(0, 192);
+        b.reset_addr_range(60, 73);
+        assert_eq!(
+            b.get_and_reset(),
+            vec![0x0fff_ffff_ffff_ffff, 0, 0xffff_ffff_ffff_ffe0]
+        );
     }
 
     #[test]
