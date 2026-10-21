@@ -94,12 +94,7 @@ mod tests {
 
     #[test]
     fn test_slit() {
-        let slit = SLIT::new(
-            [b'A', b'B', b'C', b'D', b'E', b'F'],
-            [b'A', b'B', b'C', b'D', b'E', b'F', b'G', b'H'],
-            0x1234_5678,
-            0,
-        );
+        let slit = SLIT::new(*b"ABCDEF", *b"ABCDEFGH", 0x1234_5678, 0);
 
         let mut bytes = Vec::new();
         slit.to_aml_bytes(&mut bytes);
@@ -109,12 +104,7 @@ mod tests {
 
     #[test]
     fn test_slit_entries() {
-        let mut slit = SLIT::new(
-            [b'A', b'B', b'C', b'D', b'E', b'F'],
-            [b'A', b'B', b'C', b'D', b'E', b'F', b'G', b'H'],
-            0x1234_5678,
-            2,
-        );
+        let mut slit = SLIT::new(*b"ABCDEF", *b"ABCDEFGH", 0x1234_5678, 2);
         let mut bytes = Vec::new();
         slit.set_distance(0, 1, 15);
         slit.to_aml_bytes(&mut bytes);
@@ -124,12 +114,7 @@ mod tests {
 
     #[test]
     fn test_slit_entries_more() {
-        let mut slit = SLIT::new(
-            [b'A', b'B', b'C', b'D', b'E', b'F'],
-            [b'A', b'B', b'C', b'D', b'E', b'F', b'G', b'H'],
-            0x1234_5678,
-            4,
-        );
+        let mut slit = SLIT::new(*b"ABCDEF", *b"ABCDEFGH", 0x1234_5678, 4);
         let mut bytes = Vec::new();
         slit.set_distance(0, 1, 15);
         slit.set_distance(0, 2, UNREACHABLE_LOCALITY);

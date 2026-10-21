@@ -184,10 +184,7 @@ where
         // let's terminate the iteration if something violated this.
         // (VIRTIO v1.2, 2.7.5.2: "Drivers MUST NOT add a descriptor chain
         // longer than 2^32 bytes in total;")
-        match self.yielded_bytes.checked_add(desc.len()) {
-            Some(yielded_bytes) => self.yielded_bytes = yielded_bytes,
-            None => return None,
-        };
+        self.yielded_bytes = self.yielded_bytes.checked_add(desc.len())?;
 
         if desc.has_next() {
             self.next_index = desc.next();
@@ -224,13 +221,9 @@ where
     /// _available_ descriptor chain.
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            match self.chain.next() {
-                Some(v) => {
-                    if v.is_write_only() == self.writable {
-                        return Some(v);
-                    }
-                }
-                None => return None,
+            let v = self.chain.next()?;
+            if v.is_write_only() == self.writable {
+                return Some(v);
             }
         }
     }

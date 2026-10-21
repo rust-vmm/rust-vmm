@@ -763,7 +763,7 @@ where
 // proper implementation as `GuestMemory` errors cannot implement `PartialEq`.
 impl PartialEq for Error {
     fn eq(&self, other: &Self) -> bool {
-        format!("{}", &self) == format!("{other}")
+        format!("{self}") == format!("{other}")
     }
 }
 

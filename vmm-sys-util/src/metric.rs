@@ -145,7 +145,7 @@ mod tests {
 
         impl SystemMetrics {
             fn serialize(&self) -> String {
-                let mut serialized_metrics = format!("{:#?}", &self.dog_metrics);
+                let mut serialized_metrics = format!("{:#?}", self.dog_metrics);
                 // We can choose to reset the metrics right after we format them for serialization.
                 self.dog_metrics.reset();
 

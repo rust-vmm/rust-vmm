@@ -423,11 +423,7 @@ mod tests {
 
     #[test]
     fn test_cedt() {
-        let cedt = CEDT::new(
-            [b'A', b'B', b'C', b'D', b'E', b'F'],
-            [b'A', b'B', b'C', b'D', b'E', b'F', b'G', b'H'],
-            0x1234_5678,
-        );
+        let cedt = CEDT::new(*b"ABCDEF", *b"ABCDEFGH", 0x1234_5678);
 
         let mut bytes = Vec::new();
         cedt.to_aml_bytes(&mut bytes);
@@ -437,11 +433,7 @@ mod tests {
 
     #[test]
     fn test_chbs() {
-        let mut cedt = CEDT::new(
-            [b'A', b'B', b'C', b'D', b'E', b'F'],
-            [b'A', b'B', b'C', b'D', b'E', b'F', b'G', b'H'],
-            0x1234_5678,
-        );
+        let mut cedt = CEDT::new(*b"ABCDEF", *b"ABCDEFGH", 0x1234_5678);
 
         cedt.add_host_bridge(CxlHostBridge::new(0xcdef, CxlVersion::Cxl2, 0x8_1234_5678));
 
@@ -453,11 +445,7 @@ mod tests {
 
     #[test]
     fn test_cfmws() {
-        let mut cedt = CEDT::new(
-            [b'A', b'B', b'C', b'D', b'E', b'F'],
-            [b'A', b'B', b'C', b'D', b'E', b'F', b'G', b'H'],
-            0x1234_5678,
-        );
+        let mut cedt = CEDT::new(*b"ABCDEF", *b"ABCDEFGH", 0x1234_5678);
 
         let mut fm = CxlFixedMemory::new(
             0x1020_3040_5060_7080,
@@ -485,11 +473,7 @@ mod tests {
 
     #[test]
     fn test_cxims() {
-        let mut cedt = CEDT::new(
-            [b'A', b'B', b'C', b'D', b'E', b'F'],
-            [b'A', b'B', b'C', b'D', b'E', b'F', b'G', b'H'],
-            0x1234_5678,
-        );
+        let mut cedt = CEDT::new(*b"ABCDEF", *b"ABCDEFGH", 0x1234_5678);
 
         let mut xorm = XorInterleaveMath::new(InterleaveGranularity::Granularity16kb);
 
@@ -505,11 +489,7 @@ mod tests {
 
     #[test]
     fn test_rdpas() {
-        let mut cedt = CEDT::new(
-            [b'A', b'B', b'C', b'D', b'E', b'F'],
-            [b'A', b'B', b'C', b'D', b'E', b'F', b'G', b'H'],
-            0x1234_5678,
-        );
+        let mut cedt = CEDT::new(*b"ABCDEF", *b"ABCDEFGH", 0x1234_5678);
 
         cedt.add_port_association(PortAssociation::new(
             0x100,

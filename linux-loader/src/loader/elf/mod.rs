@@ -366,7 +366,7 @@ where
             kernel_image
                 .read_exact(&mut buf)
                 .map_err(|_| Error::ReadNoteHeader)?;
-            if buf == [b'X', b'e', b'n', b'\0'] {
+            if buf == *b"Xen\0" {
                 break;
             }
         }
