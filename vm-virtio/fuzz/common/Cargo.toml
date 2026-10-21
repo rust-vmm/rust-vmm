@@ -18,3 +18,4 @@ vm-memory = {
     path = "../../../vm-memory",
     features = ["backend-mmap", "backend-atomic"]
 }
+zerocopy = "0.8.63"

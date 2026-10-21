@@ -18,7 +18,7 @@
 
 #![cfg(any(feature = "elf", feature = "pe", feature = "bzimage"))]
 
-use vm_memory::{Address, ByteValued, GuestAddress, GuestMemoryBackend};
+use vm_memory::{Address, GuestAddress, GuestMemoryBackend};
 
 use std::fmt;
 
@@ -32,6 +32,7 @@ pub mod fdt;
 
 use std::cmp::max;
 use std::mem::size_of;
+use zerocopy::{FromBytes, Immutable, IntoBytes};
 
 /// Errors specific to boot protocol configuration.
 #[derive(Debug, PartialEq, Eq)]
@@ -148,24 +149,25 @@ impl BootParams {
     ///
     /// # Arguments
     ///
-    /// * `header` - [`ByteValued`] representation of mandatory boot parameters.
+    /// * `header` - representation of mandatory boot parameters.
     /// * `header_addr` - address in guest memory where `header` will be written.
     ///
     /// # Examples
     ///
     /// ```rust
     /// # use linux_loader::configurator::BootParams;
-    /// # use vm_memory::{GuestAddress, ByteValued};
-    /// # #[derive(Clone, Copy, Default)]
+    /// # use vm_memory::GuestAddress;
+    /// # use zerocopy::{FromBytes, Immutable, IntoBytes};
+    /// # #[derive(Clone, Copy, Default, FromBytes, IntoBytes, Immutable)]
     /// # struct Header;
-    /// # unsafe impl ByteValued for Header {}
     /// let boot_params = BootParams::new(&Header::default(), GuestAddress(0x1000));
     /// ```
-    ///
-    /// [`ByteValued`]: https://docs.rs/vm-memory/latest/vm_memory/bytes/trait.ByteValued.html
-    pub fn new<T: ByteValued>(header: &T, header_addr: GuestAddress) -> Self {
+    pub fn new<T: Copy + Send + Sync + FromBytes + IntoBytes + Immutable>(
+        header: &T,
+        header_addr: GuestAddress,
+    ) -> Self {
         BootParams {
-            header: header.as_slice().to_vec(),
+            header: header.as_bytes().to_vec(),
             header_start: header_addr,
             sections: None,
             sections_start: None,
@@ -182,20 +184,19 @@ impl BootParams {
     ///
     /// # Arguments
     ///
-    /// * `sections` - vector of [`ByteValued`] boot configurations.
+    /// * `sections` - vector of boot configurations.
     /// * `sections_addr` - address where the sections will be written in guest memory.
     ///
     /// # Examples
     ///
     /// ```rust
     /// # use linux_loader::configurator::BootParams;
-    /// # use vm_memory::{ByteValued, GuestAddress};
-    /// # #[derive(Clone, Copy, Default)]
+    /// # use vm_memory::GuestAddress;
+    /// # use zerocopy::{FromBytes, Immutable, IntoBytes};
+    /// # #[derive(Clone, Copy, Default, FromBytes, IntoBytes, Immutable)]
     /// # struct Header;
-    /// # unsafe impl ByteValued for Header {}
-    /// # #[derive(Clone, Copy, Default)]
+    /// # #[derive(Clone, Copy, Default, FromBytes, IntoBytes, Immutable)]
     /// # struct Section;
-    /// # unsafe impl ByteValued for Section {}
     /// let mut boot_params = BootParams::new(&Header::default(), GuestAddress(0x1000));
     /// let mut sections: Vec<Section> = vec![Section::default()];
     /// boot_params.set_sections(sections.as_slice(), GuestAddress(0x2000));
@@ -206,13 +207,16 @@ impl BootParams {
     /// assert_eq!(boot_params.sections_start.unwrap(), GuestAddress(0x3000));
     /// ```
     ///
-    /// [`ByteValued`]: https://docs.rs/vm-memory/latest/vm_memory/bytes/trait.ByteValued.html
     /// [`hvm_memmap_table_entry`]: ../loader/elf/start_info/struct.hvm_memmap_table_entry.html
-    pub fn set_sections<T: ByteValued>(&mut self, sections: &[T], sections_addr: GuestAddress) {
+    pub fn set_sections<T: Copy + Send + Sync + FromBytes + IntoBytes + Immutable>(
+        &mut self,
+        sections: &[T],
+        sections_addr: GuestAddress,
+    ) {
         self.sections = Some(
             sections
                 .iter()
-                .flat_map(|section| section.as_slice().to_vec())
+                .flat_map(|section| section.as_bytes().to_vec())
                 .collect(),
         );
         self.sections_start = Some(sections_addr);
@@ -225,7 +229,7 @@ impl BootParams {
     ///
     /// # Arguments
     ///
-    /// * `section` - [`ByteValued`] boot section element.
+    /// * `section` - boot section element.
     /// * `section_addr` - optional address for the section in guest memory.
     ///
     /// # Returns
@@ -236,14 +240,13 @@ impl BootParams {
     ///
     /// ```rust
     /// # use linux_loader::configurator::BootParams;
-    /// # use vm_memory::{Address, GuestAddress, ByteValued};
+    /// # use vm_memory::{Address, GuestAddress};
     /// # use std::mem::size_of;
-    /// # #[derive(Clone, Copy, Default)]
+    /// # use zerocopy::{FromBytes, Immutable, IntoBytes};
+    /// # #[derive(Clone, Copy, Default, FromBytes, IntoBytes, Immutable)]
     /// # struct Header;
-    /// # unsafe impl ByteValued for Header {}
-    /// # #[derive(Clone, Copy, Default)]
+    /// # #[derive(Clone, Copy, Default, FromBytes, IntoBytes, Immutable)]
     /// # struct Section;
-    /// # unsafe impl ByteValued for Section {}
     /// let mut boot_params = BootParams::new(&Header::default(), GuestAddress(0x1000));
     /// let section = Section::default();
     /// // Sections start address needs to be configured first.
@@ -269,9 +272,7 @@ impl BootParams {
     ///     sections_start.unchecked_add(size_of::<Section>() as u64)
     /// );
     /// ```
-    ///
-    /// [`ByteValued`]: https://docs.rs/vm-memory/latest/vm_memory/bytes/trait.ByteValued.html
-    pub fn add_section<T: ByteValued>(
+    pub fn add_section<T: Copy + Send + Sync + FromBytes + IntoBytes + Immutable>(
         &mut self,
         section: &T,
         section_addr: Option<GuestAddress>,
@@ -291,20 +292,19 @@ impl BootParams {
     ///
     /// # Arguments
     ///
-    /// * `modules` - vector of [`ByteValued`] boot configurations.
+    /// * `modules` - vector of boot configurations.
     /// * `modules_addr` - address where the modules will be written in guest memory.
     ///
     /// # Examples
     ///
     /// ```rust
     /// # use linux_loader::configurator::BootParams;
-    /// # #[derive(Clone, Copy, Default)]
+    /// # use zerocopy::{FromBytes, Immutable, IntoBytes};
+    /// # #[derive(Clone, Copy, Default, FromBytes, IntoBytes, Immutable)]
     /// # struct Header;
-    /// # unsafe impl ByteValued for Header {}
-    /// # #[derive(Clone, Copy, Default)]
+    /// # #[derive(Clone, Copy, Default, FromBytes, IntoBytes, Immutable)]
     /// # struct Module;
-    /// # unsafe impl ByteValued for Module {}
-    /// # use vm_memory::{GuestAddress, ByteValued};
+    /// # use vm_memory::GuestAddress;
     /// let mut boot_params = BootParams::new(&Header::default(), GuestAddress(0x1000));
     /// let mut modules: Vec<Module> = vec![Module::default()];
     /// boot_params.set_modules(modules.as_slice(), GuestAddress(0x2000));
@@ -315,13 +315,16 @@ impl BootParams {
     /// assert_eq!(boot_params.modules_start.unwrap(), GuestAddress(0x3000));
     /// ```
     ///
-    /// [`ByteValued`]: https://docs.rs/vm-memory/latest/vm_memory/bytes/trait.ByteValued.html
     /// [`hvm_modlist_entry`]: ../loader/elf/start_info/struct.hvm_modlist_entry.html
-    pub fn set_modules<T: ByteValued>(&mut self, modules: &[T], modules_addr: GuestAddress) {
+    pub fn set_modules<T: Copy + Send + Sync + FromBytes + IntoBytes + Immutable>(
+        &mut self,
+        modules: &[T],
+        modules_addr: GuestAddress,
+    ) {
         self.modules = Some(
             modules
                 .iter()
-                .flat_map(|module| module.as_slice().to_vec())
+                .flat_map(|module| module.as_bytes().to_vec())
                 .collect(),
         );
         self.modules_start = Some(modules_addr);
@@ -334,7 +337,7 @@ impl BootParams {
     ///
     /// # Arguments
     ///
-    /// * `module` - [`ByteValued`] boot module element.
+    /// * `module` - boot module element.
     /// * `module_addr` - optional address for the module in guest memory.
     ///
     /// # Returns
@@ -345,14 +348,13 @@ impl BootParams {
     ///
     /// ```rust
     /// # use linux_loader::configurator::BootParams;
-    /// # use vm_memory::{Address, GuestAddress, ByteValued};
+    /// # use vm_memory::{Address, GuestAddress};
     /// # use std::mem::size_of;
-    /// # #[derive(Clone, Copy, Default)]
+    /// # use zerocopy::{FromBytes, Immutable, IntoBytes};
+    /// # #[derive(Clone, Copy, Default, FromBytes, IntoBytes, Immutable)]
     /// # struct Header;
-    /// # unsafe impl ByteValued for Header {}
-    /// # #[derive(Clone, Copy, Default)]
+    /// # #[derive(Clone, Copy, Default, FromBytes, IntoBytes, Immutable)]
     /// # struct Module;
-    /// # unsafe impl ByteValued for Module {}
     /// let mut boot_params = BootParams::new(&Header::default(), GuestAddress(0x1000));
     /// let module = Module::default();
     /// // Modules start address needs to be configured first.
@@ -378,9 +380,7 @@ impl BootParams {
     ///     modules_start.unchecked_add(size_of::<Module>() as u64)
     /// );
     /// ```
-    ///
-    /// [`ByteValued`]: https://docs.rs/vm-memory/latest/vm_memory/bytes/trait.ByteValued.html
-    pub fn add_module<T: ByteValued>(
+    pub fn add_module<T: Copy + Send + Sync + FromBytes + IntoBytes + Immutable>(
         &mut self,
         module: &T,
         module_addr: Option<GuestAddress>,
@@ -396,7 +396,7 @@ impl BootParams {
     /// Adds a boot parameter (section or module) to a byte buffer.
     ///
     /// Initializes the buffer and corresponding starting address, if necessary.
-    fn add_boot_parameter_to_list<T: ByteValued>(
+    fn add_boot_parameter_to_list<T: Copy + Send + Sync + FromBytes + IntoBytes + Immutable>(
         elem: &T,
         elem_start_opt: Option<GuestAddress>,
         bytes_acc: &mut Vec<u8>,
@@ -416,7 +416,7 @@ impl BootParams {
             .ok_or(Error::InvalidAddress)? as usize;
         let elem_end = elem_off + size_of::<T>();
         bytes_acc.resize(max(elem_end, bytes_acc.len()), 0);
-        bytes_acc.splice(elem_off..elem_end, elem.as_slice().iter().cloned());
+        bytes_acc.splice(elem_off..elem_end, elem.as_bytes().iter().cloned());
         Ok(elem_start)
     }
 }
@@ -425,41 +425,32 @@ impl BootParams {
 mod tests {
     #![allow(clippy::undocumented_unsafe_blocks)]
     use super::*;
+    use zerocopy::Immutable;
 
-    #[derive(Clone, Copy, Default)]
+    #[derive(Clone, Copy, Default, FromBytes, IntoBytes, Immutable)]
     struct Foobar {
         _foo: [u8; 5],
     }
 
-    unsafe impl ByteValued for Foobar {}
-
-    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, FromBytes, IntoBytes, Immutable)]
     struct DummyHeader {
         _dummy: u64,
     }
 
-    unsafe impl ByteValued for DummyHeader {}
-
-    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, FromBytes, IntoBytes, Immutable)]
     struct DummySection {
         _dummy: u64,
     }
 
-    unsafe impl ByteValued for DummySection {}
-
-    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, FromBytes, IntoBytes, Immutable)]
     struct DummyModule {
         _dummy: u64,
     }
 
-    unsafe impl ByteValued for DummyModule {}
-
-    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, FromBytes, IntoBytes, Immutable)]
     struct OtherDummyModule {
         _dummy: u64,
     }
-
-    unsafe impl ByteValued for OtherDummyModule {}
 
     #[test]
     fn test_error_messages() {
@@ -547,7 +538,7 @@ mod tests {
             .unwrap(),
             start
         );
-        assert_eq!(accumulator, element.as_slice().to_vec());
+        assert_eq!(accumulator, element.as_bytes().to_vec());
 
         // Success case: start address is unset, element address is specified.
         let mut list_start_opt: Option<GuestAddress> = None;
@@ -562,7 +553,7 @@ mod tests {
             start
         );
         assert_eq!(list_start_opt, Some(start));
-        assert_eq!(accumulator, element.as_slice().to_vec());
+        assert_eq!(accumulator, element.as_bytes().to_vec());
 
         // Error case: start address is set, element address is specified, but precedes start.
         assert_eq!(
@@ -636,7 +627,7 @@ mod tests {
         let hdr = DummyHeader::default();
         let hdr_addr = GuestAddress(0x1000);
         let mut bootparams = BootParams::new(&hdr, hdr_addr);
-        assert_eq!(bootparams.header, hdr.as_slice());
+        assert_eq!(bootparams.header, hdr.as_bytes());
         assert_eq!(bootparams.header_start, hdr_addr);
 
         // Test setting sections.

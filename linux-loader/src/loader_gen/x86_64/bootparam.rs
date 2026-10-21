@@ -5,6 +5,8 @@
 
 // --- setup_data.h constants ---
 
+use zerocopy::{FromBytes, Immutable, IntoBytes};
+
 pub const SETUP_NONE: u32 = 0;
 pub const SETUP_E820_EXT: u32 = 1;
 pub const SETUP_DTB: u32 = 2;
@@ -104,7 +106,7 @@ pub const VIDEO_CAPABILITY_64BIT_BASE: u32 = 1 << 1;
 
 /// From include/uapi/linux/screen_info.h
 #[repr(C, packed)]
-#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, FromBytes, IntoBytes, Immutable)]
 pub struct screen_info {
     pub orig_x: u8,
     pub orig_y: u8,
@@ -146,7 +148,7 @@ pub struct screen_info {
 
 /// From include/uapi/linux/apm_bios.h
 #[repr(C, packed)]
-#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, FromBytes, IntoBytes, Immutable)]
 pub struct apm_bios_info {
     pub version: u16,
     pub cseg: u16,
@@ -161,7 +163,7 @@ pub struct apm_bios_info {
 
 /// From arch/x86/include/uapi/asm/ist.h
 #[repr(C, packed)]
-#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, FromBytes, IntoBytes, Immutable)]
 pub struct ist_info {
     pub signature: u32,
     pub command: u32,
@@ -171,7 +173,7 @@ pub struct ist_info {
 
 /// From include/uapi/video/edid.h
 #[repr(C, packed)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, FromBytes, IntoBytes, Immutable)]
 pub struct edid_info {
     pub dummy: [u8; 128],
 }
@@ -184,7 +186,7 @@ impl Default for edid_info {
 
 /// From arch/x86/include/uapi/asm/setup_data.h
 #[repr(C, packed)]
-#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, FromBytes, IntoBytes, Immutable)]
 pub struct boot_e820_entry {
     pub addr: u64,
     pub size: u64,
@@ -198,7 +200,7 @@ pub struct boot_e820_entry {
 /// for simplicity. Transmute or use `ptr::read_unaligned` to access a
 /// specific variant.
 #[repr(C, packed)]
-#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, FromBytes, IntoBytes, Immutable)]
 pub struct edd_device_params {
     pub length: u16,
     pub info_flags: u16,
@@ -222,7 +224,7 @@ pub struct edd_device_params {
 
 /// From include/uapi/linux/edd.h
 #[repr(C, packed)]
-#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, FromBytes, IntoBytes, Immutable)]
 pub struct edd_info {
     pub device: u8,
     pub version: u8,
@@ -235,7 +237,7 @@ pub struct edd_info {
 
 /// From arch/x86/include/uapi/asm/bootparam.h
 #[repr(C, packed)]
-#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, FromBytes, IntoBytes, Immutable)]
 pub struct setup_header {
     pub setup_sects: u8,
     pub root_flags: u16,
@@ -279,14 +281,14 @@ pub struct setup_header {
 }
 
 #[repr(C, packed)]
-#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, FromBytes, IntoBytes, Immutable)]
 pub struct sys_desc_table {
     pub length: u16,
     pub table: [u8; 14],
 }
 
 #[repr(C, packed)]
-#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, FromBytes, IntoBytes, Immutable)]
 pub struct olpc_ofw_header {
     pub ofw_magic: u32,
     pub ofw_version: u32,
@@ -295,7 +297,7 @@ pub struct olpc_ofw_header {
 }
 
 #[repr(C, packed)]
-#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, FromBytes, IntoBytes, Immutable)]
 pub struct efi_info {
     pub efi_loader_signature: u32,
     pub efi_systab: u32,
@@ -311,7 +313,7 @@ pub struct efi_info {
 ///
 /// `_pad7` size is `0x290 - 0x1f1 - sizeof(setup_header)` = 36 bytes.
 #[repr(C, packed)]
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, FromBytes, IntoBytes, Immutable)]
 pub struct boot_params {
     pub screen_info: screen_info,                                 // 0x000
     pub apm_bios_info: apm_bios_info,                             // 0x040

@@ -8,6 +8,12 @@
   guest-memory reads, writes, and range checks that fit within a single memory
   region.
 
+## Removed
+
+- \[[#52](https://github.com/rust-vmm/rust-vmm/pull/52)\] Removed `ByteValued` trait and `endian` module in favor of the `zerocopy` crate.
+  `ByteValued`'s functionality is now provided by `zerocopy::IntoBytes`, `zerocopy::FromBytes` and `zerocopy::Zeroed`.
+  `ByteValued::as_bytes` can be replaced with `VolatileSlices::from` for `&mut [u8]`.
+
 ## 0.18.0
 
 ### Changed

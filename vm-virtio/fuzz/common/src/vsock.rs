@@ -2,29 +2,27 @@ use crate::FuzzingDescriptor;
 use virtio_vsock::packet::VsockPacket;
 
 use serde::{Deserialize, Serialize};
-use vm_memory::{ByteValued, Bytes, GuestAddress, GuestMemoryMmap, Le16, Le32, Le64};
+use vm_memory::{Bytes, GuestAddress, GuestMemoryMmap};
+use zerocopy::little_endian::{U16, U32, U64};
+use zerocopy::{FromBytes, Immutable, IntoBytes};
 
-#[derive(Clone, Copy, Default, Debug, PartialEq)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, FromBytes, IntoBytes, Immutable)]
 /// A copy of the virtio-vsock PacketHeader structure. All the fields are the same and must be
 /// kept exactly the same because we are using this structure to write into Guest Memory
 /// a Vsock Header that can be read during fuzzing. We cannot use the PacketHeader because
 /// for security reasons the fields of the upstream structure are private.
 pub struct FuzzingPacketHeader {
-    pub src_cid: Le64,
-    pub dst_cid: Le64,
-    pub src_port: Le32,
-    pub dst_port: Le32,
-    pub len: Le32,
-    pub type_: Le16,
-    pub op: Le16,
-    pub flags: Le32,
-    pub buf_alloc: Le32,
-    pub fwd_cnt: Le32,
+    pub src_cid: U64,
+    pub dst_cid: U64,
+    pub src_port: U32,
+    pub dst_port: U32,
+    pub len: U32,
+    pub type_: U16,
+    pub op: U16,
+    pub flags: U32,
+    pub buf_alloc: U32,
+    pub fwd_cnt: U32,
 }
-
-// This is safe because `FuzzingPacketHeader` contains only wrappers over POD types and all
-// accesses through safe `vm-memory` API will validate any garbage that could be included in there.
-unsafe impl ByteValued for FuzzingPacketHeader {}
 
 /// All the functions that can be called when fuzzing the VsockPacket.
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -345,7 +343,7 @@ mod tests {
             buf_alloc: BUF_ALLOC.into(),
             fwd_cnt: FWD_CNT.into(),
         };
-        let header_bytes = header.as_slice();
+        let header_bytes = header.as_bytes();
 
         mem.write_slice(header_bytes, GuestAddress(HEADER_WRITE_ADDR))
             .unwrap();

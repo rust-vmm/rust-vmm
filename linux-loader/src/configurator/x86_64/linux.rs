@@ -66,7 +66,7 @@ impl BootConfigurator for LinuxBootConfigurator {
     /// # use linux_loader::configurator::{BootConfigurator, BootParams};
     /// # use linux_loader::configurator::linux::LinuxBootConfigurator;
     /// # use linux_loader::loader::bootparam::boot_params;
-    /// # use vm_memory::{Address, ByteValued, GuestMemoryBackend, GuestMemoryMmap, GuestAddress};
+    /// # use vm_memory::{Address,  GuestMemoryBackend, GuestMemoryMmap, GuestAddress};
     /// # const KERNEL_BOOT_FLAG_MAGIC: u16 = 0xaa55;
     /// # const KERNEL_HDR_MAGIC: u32 = 0x53726448;
     /// # const KERNEL_LOADER_OTHER: u8 = 0xff;

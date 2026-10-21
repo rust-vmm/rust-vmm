@@ -56,10 +56,10 @@ impl BootConfigurator for FdtBootConfigurator {
     /// # extern crate vm_memory;
     /// # use linux_loader::configurator::{BootConfigurator, BootParams};
     /// # use linux_loader::configurator::fdt::FdtBootConfigurator;
-    /// # use vm_memory::{Address, ByteValued, GuestMemoryBackend, GuestMemoryMmap, GuestAddress};
-    /// # #[derive(Clone, Copy, Default)]
+    /// # use vm_memory::{Address, GuestMemoryBackend, GuestMemoryMmap, GuestAddress};
+    /// # use zerocopy::{FromBytes, Immutable, IntoBytes};
+    /// # #[derive(Clone, Copy, Default, FromBytes, IntoBytes, Immutable)]
     /// # struct FdtPlaceholder([u8; 0x20]);
-    /// # unsafe impl ByteValued for FdtPlaceholder {}
     /// # fn create_guest_memory() -> GuestMemoryMmap {
     /// #   GuestMemoryMmap::from_ranges(&[(GuestAddress(0x0), (0x100_0000 as usize))]).unwrap()
     /// # }
@@ -85,7 +85,7 @@ impl BootConfigurator for FdtBootConfigurator {
             .checked_offset(params.header_start, params.header.len())
             .ok_or(Error::FDTPastRamEnd)?;
 
-        // The VMM has filled an FDT and passed it as a `ByteValued` object.
+        // The VMM has filled an FDT and passed it as a `FromBytes + Immutable + IntoBytes` object.
         guest_memory
             .write_slice(params.header.as_slice(), params.header_start)
             .map_err(|_| Error::WriteFDTToMemory.into())
@@ -96,7 +96,8 @@ impl BootConfigurator for FdtBootConfigurator {
 mod tests {
     #![allow(clippy::undocumented_unsafe_blocks)]
     use super::*;
-    use vm_memory::{Address, ByteValued, GuestAddress, GuestMemoryMmap};
+    use vm_memory::{Address, GuestAddress, GuestMemoryMmap};
+    use zerocopy::{FromBytes, Immutable, IntoBytes};
 
     const FDT_MAX_SIZE: usize = 0x20;
     const MEM_SIZE: u64 = 0x100_0000;
@@ -105,10 +106,8 @@ mod tests {
         GuestMemoryMmap::from_ranges(&[(GuestAddress(0x0), (MEM_SIZE as usize))]).unwrap()
     }
 
-    #[derive(Clone, Copy, Default)]
-    #[allow(dead_code)] // rustc thinks the field is never read, but it is via `ByteValued` impl
+    #[derive(Clone, Copy, Default, FromBytes, IntoBytes, Immutable)]
     struct FdtPlaceholder([u8; FDT_MAX_SIZE]);
-    unsafe impl ByteValued for FdtPlaceholder {}
 
     #[test]
     fn test_configure_fdt_boot() {

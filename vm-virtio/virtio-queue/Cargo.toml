@@ -17,6 +17,7 @@ vm-memory = { workspace = true }
 vmm-sys-util = { workspace = true }
 log = "0.4.17"
 virtio-bindings = { workspace = true }
+zerocopy = { workspace = true }
 
 [dev-dependencies]
 criterion = "0.8.0"

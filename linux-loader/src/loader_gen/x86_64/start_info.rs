@@ -2,6 +2,8 @@
 
 #![allow(non_camel_case_types)]
 
+use zerocopy::{FromBytes, Immutable, IntoBytes};
+
 pub const XEN_HVM_START_MAGIC_VALUE: u32 = 0x336ec578;
 
 pub const XEN_HVM_MEMMAP_TYPE_RAM: u32 = 1;
@@ -18,7 +20,7 @@ pub const XEN_HVM_MEMMAP_TYPE_PMEM: u32 = 7;
 /// Version 0 ends after `rsdp_paddr`; fields from `memmap_paddr` onward
 /// are only present in version 1+.
 #[repr(C)]
-#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, FromBytes, IntoBytes, Immutable)]
 pub struct hvm_start_info {
     pub magic: u32,
     pub version: u32,
@@ -33,7 +35,7 @@ pub struct hvm_start_info {
 }
 
 #[repr(C)]
-#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, FromBytes, IntoBytes, Immutable)]
 pub struct hvm_modlist_entry {
     pub paddr: u64,
     pub size: u64,
@@ -42,7 +44,7 @@ pub struct hvm_modlist_entry {
 }
 
 #[repr(C)]
-#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, FromBytes, IntoBytes, Immutable)]
 pub struct hvm_memmap_table_entry {
     pub addr: u64,
     pub size: u64,

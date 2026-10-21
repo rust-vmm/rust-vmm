@@ -37,7 +37,8 @@ use virtio_queue::{
     desc::{split::Descriptor as SplitDescriptor, RawDescriptor},
     DescriptorChain,
 };
-use vm_memory::{ByteValued, Bytes, GuestAddress, GuestMemory, GuestMemoryError, Permissions};
+use vm_memory::{Bytes, GuestAddress, GuestMemory, GuestMemoryError, Permissions};
+use zerocopy::{FromBytes, Immutable, IntoBytes};
 
 /// Block request parsing errors.
 #[derive(Debug)]
@@ -108,7 +109,7 @@ impl From<u32> for RequestType {
 }
 
 /// Block request header.
-#[derive(Copy, Clone, Debug, Default)]
+#[derive(Copy, Clone, Debug, Default, FromBytes, IntoBytes, Immutable)]
 #[repr(C)]
 struct RequestHeader {
     request_type: u32,
@@ -129,9 +130,6 @@ pub struct Request {
     /// The address where the device should write the request status.
     status_addr: GuestAddress,
 }
-
-// SAFETY: Safe because RequestHeader contains only plain data.
-unsafe impl ByteValued for RequestHeader {}
 
 impl Request {
     /// Returns the request type.

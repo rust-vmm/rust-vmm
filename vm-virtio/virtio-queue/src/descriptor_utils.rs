@@ -8,14 +8,14 @@
 
 use std::collections::VecDeque;
 use std::io::{self, Read, Write};
-use std::mem::{size_of, MaybeUninit};
 use std::ops::Deref;
 use std::ptr::copy_nonoverlapping;
 use std::{cmp, result};
 
 use crate::{DescriptorChain, Error};
 use vm_memory::bitmap::{BitmapSlice, WithBitmapSlice};
-use vm_memory::{ByteValued, GuestMemory, Permissions, VolatileSlice};
+use vm_memory::{GuestMemory, Permissions, VolatileSlice};
+use zerocopy::{FromBytes, Immutable, IntoBytes};
 
 pub type Result<T> = result::Result<T, Error>;
 
@@ -190,20 +190,10 @@ impl<'a, B: BitmapSlice> Reader<'a, B> {
     }
 
     /// Reads an object from the descriptor chain buffer.
-    pub fn read_obj<T: ByteValued>(&mut self) -> io::Result<T> {
-        let mut obj = MaybeUninit::<T>::uninit();
-
-        // SAFETY: `MaybeUninit` guarantees that the pointer is valid for
-        // `size_of::<T>()` bytes.
-        let buf = unsafe {
-            ::std::slice::from_raw_parts_mut(obj.as_mut_ptr() as *mut u8, size_of::<T>())
-        };
-
-        self.read_exact(buf)?;
-
-        // SAFETY: any type that implements `ByteValued` can be considered initialized
-        // even if it is filled with random data.
-        Ok(unsafe { obj.assume_init() })
+    pub fn read_obj<T: Copy + Send + Sync + FromBytes + IntoBytes>(&mut self) -> io::Result<T> {
+        let mut obj = T::new_zeroed();
+        self.read_exact(obj.as_mut_bytes())?;
+        Ok(obj)
     }
 
     /// Returns number of bytes available for reading.  May return an error if the combined
@@ -298,8 +288,11 @@ impl<'a, B: BitmapSlice> Writer<'a, B> {
     }
 
     /// Writes an object to the descriptor chain buffer.
-    pub fn write_obj<T: ByteValued>(&mut self, val: T) -> io::Result<()> {
-        self.write_all(val.as_slice())
+    pub fn write_obj<T: Copy + Send + Sync + FromBytes + IntoBytes + Immutable>(
+        &mut self,
+        val: T,
+    ) -> io::Result<()> {
+        self.write_all(val.as_bytes())
     }
 
     /// Returns number of bytes available for writing.  May return an error if the combined
@@ -358,7 +351,8 @@ mod tests {
         desc::{split::Descriptor as SplitDescriptor, RawDescriptor},
         Queue, QueueOwnedT, QueueT,
     };
-    use vm_memory::{Address, GuestAddress, GuestMemoryMmap, Le32};
+    use vm_memory::{Address, GuestAddress, GuestMemoryMmap};
+    use zerocopy::little_endian::U32;
 
     use crate::mock::MockSplitQueue;
     use virtio_bindings::bindings::virtio_ring::{VRING_DESC_F_NEXT, VRING_DESC_F_WRITE};
@@ -618,7 +612,7 @@ mod tests {
         let memory_start_addr = GuestAddress(0x0);
         let memory = GuestMemoryMmap::from_ranges(&[(memory_start_addr, 0x10000)]).unwrap();
 
-        let secret: Le32 = 0x1234_5678.into();
+        let secret: U32 = 0x1234_5678.into();
 
         // Create a descriptor chain with memory regions that are properly separated.
         let chain_writer = create_descriptor_chain(
@@ -642,7 +636,7 @@ mod tests {
         )
         .expect("create_descriptor_chain failed");
         let mut reader = Reader::new(&memory, chain_reader).expect("failed to create Reader");
-        match reader.read_obj::<Le32>() {
+        match reader.read_obj::<U32>() {
             Err(e) => panic!("read_obj should not fail here: {e:?}"),
             Ok(read_secret) => assert_eq!(read_secret, secret),
         }

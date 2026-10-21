@@ -1,21 +1,24 @@
 //! packed descriptor
+
 use virtio_bindings::bindings::virtio_ring::{
     VRING_DESC_F_INDIRECT, VRING_DESC_F_NEXT, VRING_DESC_F_WRITE,
 };
-use vm_memory::{ByteValued, GuestAddress, Le16, Le32, Le64};
+use vm_memory::GuestAddress;
+use zerocopy::little_endian::{U16, U32, U64};
+use zerocopy::{FromBytes, Immutable, IntoBytes};
 
 /// A virtio packed descriptor constraints with C representation.
 #[repr(C)]
-#[derive(Default, Clone, Copy, Debug)]
+#[derive(Default, Clone, Copy, Debug, FromBytes, IntoBytes, Immutable)]
 pub struct Descriptor {
     /// Guest physical address of device specific data.
-    addr: Le64,
+    addr: U64,
     /// Length of device specific data.
-    len: Le32,
+    len: U32,
     /// Index of descriptor in the descriptor table.
-    id: Le16,
+    id: U16,
     /// Includes next, write, and indirect bits.
-    flags: Le16,
+    flags: U16,
 }
 
 #[allow(clippy::len_without_is_empty)]
@@ -97,17 +100,12 @@ impl Descriptor {
     }
 }
 
-// SAFETY: This is safe because `Descriptor` contains only wrappers over POD types and
-// all accesses through safe `vm-memory` API will validate any garbage that could be
-// included in there.
-unsafe impl ByteValued for Descriptor {}
-
 /// A packed descriptor event constraints with C representation.
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, FromBytes, IntoBytes, Immutable)]
 pub struct PackedDescEvent {
-    off_wrap: Le16,
-    flags: Le16,
+    off_wrap: U16,
+    flags: U16,
 }
 
 impl PackedDescEvent {
@@ -124,11 +122,6 @@ impl PackedDescEvent {
         }
     }
 }
-
-// SAFETY: This is safe because `PackedDescEvent` contains only wrappers over POD types and
-// all accesses through safe `vm-memory` API will validate any garbage that could be
-// included in there.
-unsafe impl ByteValued for PackedDescEvent {}
 
 #[cfg(test)]
 mod tests {
@@ -177,7 +170,7 @@ mod tests {
         let e1 = Descriptor::new(1, 2, 0, 3);
         let mut e2 = Descriptor::default();
 
-        e2.as_mut_slice().copy_from_slice(e1.as_slice());
+        e2.as_mut_bytes().copy_from_slice(e1.as_bytes());
         assert_eq!(e1.addr(), e2.addr());
         assert_eq!(e1.len(), e2.len());
         assert_eq!(e1.id(), e2.id());
@@ -196,7 +189,7 @@ mod tests {
         let e1 = PackedDescEvent::new(1, 2);
         let mut e2 = PackedDescEvent::new(0, 0);
 
-        e2.as_mut_slice().copy_from_slice(e1.as_slice());
+        e2.as_mut_bytes().copy_from_slice(e1.as_bytes());
         assert_eq!(e1.off_wrap, e2.off_wrap);
         assert_eq!(e1.flags, e2.flags);
     }

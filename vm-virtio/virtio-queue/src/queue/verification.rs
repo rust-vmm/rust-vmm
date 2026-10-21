@@ -8,7 +8,6 @@ use vm_memory::{
 };
 
 use std::mem::MaybeUninit;
-use vm_memory::ByteValued;
 
 use super::*;
 
@@ -135,7 +134,10 @@ impl Bytes<MemoryRegionAddress> for StubRegion {
         Ok(())
     }
 
-    fn read_obj<T: ByteValued>(&self, addr: MemoryRegionAddress) -> Result<T, Self::E> {
+    fn read_obj<T: Copy + Send + Sync + FromBytes + IntoBytes>(
+        &self,
+        addr: MemoryRegionAddress,
+    ) -> Result<T, Self::E> {
         let size = std::mem::size_of::<T>();
         let offset = addr.0 as usize;
         let end = offset
@@ -155,7 +157,11 @@ impl Bytes<MemoryRegionAddress> for StubRegion {
         Ok(result)
     }
 
-    fn write_obj<T: ByteValued>(&self, val: T, addr: MemoryRegionAddress) -> Result<(), Self::E> {
+    fn write_obj<T: Copy + Send + Sync + FromBytes + IntoBytes>(
+        &self,
+        val: T,
+        addr: MemoryRegionAddress,
+    ) -> Result<(), Self::E> {
         let size = std::mem::size_of::<T>();
         let offset = addr.0 as usize;
         let end = offset

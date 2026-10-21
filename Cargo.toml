@@ -38,3 +38,5 @@ virtio-bindings = { version = "0.2.7", path = "vm-virtio/virtio-bindings" }
 virtio-device = { version = "0.1.0", path = "vm-virtio/virtio-device" }
 virtio-queue = { version = "0.18.0", path = "vm-virtio/virtio-queue" }
 virtio-queue-ser = { version = "0.14.0", path = "vm-virtio/virtio-queue-ser" }
+
+zerocopy = { version = "0.8.63", features = ["derive"] }

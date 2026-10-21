@@ -7,6 +7,8 @@
 // ELF base type aliases
 // ============================================================================
 
+use zerocopy::{FromBytes, Immutable, IntoBytes};
+
 pub type Elf32_Addr = u32;
 pub type Elf32_Half = u16;
 pub type Elf32_Off = u32;
@@ -643,7 +645,7 @@ pub struct Elf32_Verdaux {
 // ============================================================================
 
 #[repr(C)]
-#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, FromBytes, IntoBytes, Immutable)]
 pub struct Elf64_Ehdr {
     pub e_ident: [u8; EI_NIDENT],
     pub e_type: Elf64_Half,
@@ -662,7 +664,7 @@ pub struct Elf64_Ehdr {
 }
 
 #[repr(C)]
-#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, FromBytes, IntoBytes, Immutable)]
 pub struct Elf64_Phdr {
     pub p_type: Elf64_Word,
     pub p_flags: Elf64_Word,
@@ -734,7 +736,7 @@ pub struct Elf64_Dyn {
 }
 
 #[repr(C)]
-#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, FromBytes, IntoBytes, Immutable)]
 pub struct Elf64_Nhdr {
     pub n_namesz: Elf64_Word,
     pub n_descsz: Elf64_Word,

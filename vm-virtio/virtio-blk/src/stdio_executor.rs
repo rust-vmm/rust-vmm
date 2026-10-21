@@ -28,12 +28,10 @@ use std::io::{Seek, SeekFrom};
 use std::{io, mem, result};
 
 use log::{error, warn};
-
-use vm_memory::{
-    Address, ByteValued, Bytes, GuestMemory, GuestMemoryError, ReadVolatile, WriteVolatile,
-};
+use vm_memory::{Address, Bytes, GuestMemory, GuestMemoryError, ReadVolatile, WriteVolatile};
 use vmm_sys_util::file_traits::FileSync;
 use vmm_sys_util::write_zeroes::{PunchHole, WriteZeroesAt};
+use zerocopy::{FromBytes, Immutable, IntoBytes};
 
 use crate::defs::{SECTOR_SHIFT, SECTOR_SIZE};
 use crate::request::{Request, RequestType};
@@ -54,7 +52,7 @@ impl<B: ReadVolatile + WriteVolatile + Seek + FileSync + PunchHole + WriteZeroes
 
 /// One or more `DiscardWriteZeroes` structs are used to describe the data for
 /// discard or write zeroes command.
-#[derive(Copy, Clone, Debug, Default)]
+#[derive(Copy, Clone, Debug, Default, FromBytes, IntoBytes, Immutable)]
 #[repr(C)]
 struct DiscardWriteZeroes {
     sector: u64,
@@ -69,9 +67,6 @@ impl DiscardWriteZeroes {
     // Size of DiscardWriteZeroes struct.
     const LEN: u64 = mem::size_of::<DiscardWriteZeroes>() as u64;
 }
-
-// SAFETY: Safe because DiscardWriteZeroes contains only plain data.
-unsafe impl ByteValued for DiscardWriteZeroes {}
 
 /// Errors encountered during request execution.
 #[derive(Debug)]

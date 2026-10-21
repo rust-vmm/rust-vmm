@@ -11,7 +11,9 @@
 // SPDX-License-Identifier: Apache-2.0 AND BSD-3-Clause
 //! split descriptor
 
-use vm_memory::{ByteValued, GuestAddress, Le16, Le32, Le64};
+use vm_memory::GuestAddress;
+use zerocopy::little_endian::{U16, U32, U64};
+use zerocopy::{FromBytes, Immutable, IntoBytes};
 
 use virtio_bindings::bindings::virtio_ring::{
     VRING_DESC_F_INDIRECT, VRING_DESC_F_NEXT, VRING_DESC_F_WRITE,
@@ -26,6 +28,7 @@ use virtio_bindings::bindings::virtio_ring::{
 /// # use virtio_queue::mock::MockSplitQueue;
 /// use virtio_queue::{desc::{split::Descriptor as SplitDescriptor, RawDescriptor}, Queue, QueueOwnedT};
 /// use vm_memory::{GuestAddress, GuestMemoryMmap};
+/// use std::num::Wrapping;
 ///
 /// # fn populate_queue(m: &GuestMemoryMmap) -> Queue {
 /// #    let vq = MockSplitQueue::new(m, 16);
@@ -38,7 +41,7 @@ use virtio_bindings::bindings::virtio_ring::{
 /// #    vq.desc_table().store(1, desc);
 /// #
 /// #    vq.avail().ring().ref_at(0).unwrap().store(u16::to_le(0));
-/// #    vq.avail().idx().store(u16::to_le(1));
+/// #    vq.avail().idx().store(Wrapping(u16::to_le(1)));
 /// #    q
 /// # }
 /// let m = &GuestMemoryMmap::<()>::from_ranges(&[(GuestAddress(0), 0x10000)]).unwrap();
@@ -59,19 +62,19 @@ use virtio_bindings::bindings::virtio_ring::{
 /// ```
 /// A virtio split descriptor constraints with C representation.
 #[repr(C)]
-#[derive(Default, Clone, Copy, Debug)]
+#[derive(Default, Clone, Copy, Debug, FromBytes, IntoBytes, Immutable)]
 pub struct Descriptor {
     /// Guest physical address of device specific data.
-    addr: Le64,
+    addr: U64,
 
     /// Length of device specific data.
-    len: Le32,
+    len: U32,
 
     /// Includes next, write, and indirect bits.
-    flags: Le16,
+    flags: U16,
 
     /// Index into the descriptor table of the next descriptor if flags has the `next` bit set.
-    next: Le16,
+    next: U16,
 }
 
 #[allow(clippy::len_without_is_empty)]
@@ -154,19 +157,12 @@ impl Descriptor {
     }
 }
 
-// SAFETY: This is safe because `Descriptor` contains only wrappers over POD types and
-// all accesses through safe `vm-memory` API will validate any garbage that could be
-// included in there.
-unsafe impl ByteValued for Descriptor {}
-
 /// Represents the contents of an element from the used virtqueue ring.
-// Note that the `ByteValued` implementation of this structure expects the `VirtqUsedElem` to store
-// only plain old data types.
 #[repr(C)]
-#[derive(Clone, Copy, Default, Debug)]
+#[derive(Clone, Copy, Default, Debug, FromBytes, IntoBytes, Immutable)]
 pub struct VirtqUsedElem {
-    id: Le32,
-    len: Le32,
+    id: U32,
+    len: U32,
 }
 
 impl VirtqUsedElem {
@@ -197,11 +193,6 @@ impl VirtqUsedElem {
         self.len.into()
     }
 }
-
-// SAFETY: This is safe because `VirtqUsedElem` contains only wrappers over POD types
-// and all accesses through safe `vm-memory` API will validate any garbage that could be
-// included in there.
-unsafe impl ByteValued for VirtqUsedElem {}
 
 #[cfg(test)]
 mod tests {
@@ -251,7 +242,7 @@ mod tests {
         let e1 = Descriptor::new(1, 2, VRING_DESC_F_NEXT as u16, 3);
         let mut e2 = Descriptor::default();
 
-        e2.as_mut_slice().copy_from_slice(e1.as_slice());
+        e2.as_mut_bytes().copy_from_slice(e1.as_bytes());
         assert_eq!(e1.addr(), e2.addr());
         assert_eq!(e1.len(), e2.len());
         assert_eq!(e1.flags(), e2.flags());
@@ -270,7 +261,7 @@ mod tests {
         let e1 = VirtqUsedElem::new(3, 15);
         let mut e2 = VirtqUsedElem::new(0, 0);
 
-        e2.as_mut_slice().copy_from_slice(e1.as_slice());
+        e2.as_mut_bytes().copy_from_slice(e1.as_bytes());
         assert_eq!(e1.id, e2.id);
         assert_eq!(e1.len, e2.len);
     }

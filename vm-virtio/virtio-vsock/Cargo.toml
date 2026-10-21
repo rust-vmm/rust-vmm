@@ -14,6 +14,7 @@ edition = "2021"
 virtio-queue = { workspace = true }
 virtio-bindings = { workspace = true }
 vm-memory = { workspace = true }
+zerocopy = { workspace = true }
 
 [dev-dependencies]
 virtio-queue = { workspace = true, features = ["test-utils"] }

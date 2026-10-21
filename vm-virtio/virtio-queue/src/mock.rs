@@ -7,9 +7,7 @@
 use std::marker::PhantomData;
 use std::mem::size_of;
 
-use vm_memory::{
-    Address, ByteValued, Bytes, GuestAddress, GuestMemory, GuestMemoryError, GuestUsize,
-};
+use vm_memory::{Address, Bytes, GuestAddress, GuestMemory, GuestMemoryError, GuestUsize};
 
 use crate::defs::{VIRTQ_AVAIL_ELEMENT_SIZE, VIRTQ_AVAIL_RING_HEADER_SIZE};
 use crate::{
@@ -20,7 +18,9 @@ use crate::{
     DescriptorChain, Error, Queue, QueueOwnedT, QueueT,
 };
 use std::fmt::{self, Debug, Display};
+use std::num::Wrapping;
 use virtio_bindings::bindings::virtio_ring::{VRING_DESC_F_INDIRECT, VRING_DESC_F_NEXT};
+use zerocopy::{FromBytes, IntoBytes};
 
 /// Mock related errors.
 #[derive(Debug)]
@@ -63,7 +63,7 @@ pub struct Ref<'a, M, T> {
     phantom: PhantomData<*const T>,
 }
 
-impl<'a, M: GuestMemory, T: ByteValued> Ref<'a, M, T> {
+impl<'a, M: GuestMemory, T: Copy + Send + Sync + FromBytes + IntoBytes> Ref<'a, M, T> {
     fn new(mem: &'a M, addr: GuestAddress) -> Self {
         Ref {
             mem,
@@ -91,7 +91,7 @@ pub struct ArrayRef<'a, M, T> {
     phantom: PhantomData<*const T>,
 }
 
-impl<'a, M: GuestMemory, T: ByteValued> ArrayRef<'a, M, T> {
+impl<'a, M: GuestMemory, T: Copy + Send + Sync + FromBytes + IntoBytes> ArrayRef<'a, M, T> {
     fn new(mem: &'a M, addr: GuestAddress, len: usize) -> Self {
         ArrayRef {
             mem,
@@ -119,19 +119,15 @@ impl<'a, M: GuestMemory, T: ByteValued> ArrayRef<'a, M, T> {
 
 /// Represents a virtio queue ring. The only difference between the used and available rings,
 /// is the ring element type.
-pub struct SplitQueueRing<'a, M, T: ByteValued> {
+pub struct SplitQueueRing<'a, M, T: Copy + Send + Sync + FromBytes + IntoBytes> {
     flags: Ref<'a, M, u16>,
-    // The value stored here should more precisely be a `Wrapping<u16>`, but that would require a
-    // `ByteValued` impl for this type, which is not provided in vm-memory. Implementing the trait
-    // here would require defining a wrapper for `Wrapping<u16>` and that would be too much for a
-    // mock framework that is only used in tests.
-    idx: Ref<'a, M, u16>,
+    idx: Ref<'a, M, Wrapping<u16>>,
     ring: ArrayRef<'a, M, T>,
     // `used_event` for `AvailRing`, `avail_event` for `UsedRing`.
     event: Ref<'a, M, u16>,
 }
 
-impl<'a, M: GuestMemory, T: ByteValued> SplitQueueRing<'a, M, T> {
+impl<'a, M: GuestMemory, T: Copy + Send + Sync + FromBytes + IntoBytes> SplitQueueRing<'a, M, T> {
     /// Create a new `SplitQueueRing` instance
     pub fn new(mem: &'a M, base: GuestAddress, len: u16) -> Self {
         let event_addr = base
@@ -147,7 +143,7 @@ impl<'a, M: GuestMemory, T: ByteValued> SplitQueueRing<'a, M, T> {
         };
 
         split_queue_ring.flags.store(0);
-        split_queue_ring.idx.store(0);
+        split_queue_ring.idx.store(Wrapping(0));
         split_queue_ring.event.store(0);
 
         split_queue_ring
@@ -166,7 +162,7 @@ impl<'a, M: GuestMemory, T: ByteValued> SplitQueueRing<'a, M, T> {
     }
 
     /// Return a reference to the idx field.
-    pub fn idx(&self) -> &Ref<'a, M, u16> {
+    pub fn idx(&self) -> &Ref<'a, M, Wrapping<u16>> {
         &self.idx
     }
 
@@ -356,8 +352,8 @@ impl<'a, M: GuestMemory> MockSplitQueue<'a, M> {
 
     fn update_avail_idx(&mut self, value: u16) -> Result<(), MockError> {
         let avail_idx = self.avail.idx.load();
-        self.avail.ring.ref_at(avail_idx as usize)?.store(value);
-        self.avail.idx.store(avail_idx.wrapping_add(1));
+        self.avail.ring.ref_at(avail_idx.0 as usize)?.store(value);
+        self.avail.idx.store(avail_idx + Wrapping(1));
         Ok(())
     }
 

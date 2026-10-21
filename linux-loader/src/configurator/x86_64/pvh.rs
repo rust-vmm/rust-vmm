@@ -14,10 +14,9 @@
 
 #![cfg(any(feature = "elf", feature = "bzimage"))]
 
-use vm_memory::{ByteValued, Bytes, GuestMemoryBackend};
+use vm_memory::{Bytes, GuestMemoryBackend};
 
 use crate::configurator::{BootConfigurator, BootParams, Error as BootConfiguratorError, Result};
-use crate::loader_gen::start_info::{hvm_memmap_table_entry, hvm_modlist_entry, hvm_start_info};
 
 use std::fmt;
 
@@ -75,18 +74,6 @@ impl From<Error> for BootConfiguratorError {
     }
 }
 
-// SAFETY: The layout of the structure is fixed and can be initialized by
-// reading its content from byte array.
-unsafe impl ByteValued for hvm_start_info {}
-
-// SAFETY: The layout of the structure is fixed and can be initialized by
-// reading its content from byte array.
-unsafe impl ByteValued for hvm_memmap_table_entry {}
-
-// SAFETY: The layout of the structure is fixed and can be initialized by
-// reading its content from byte array.
-unsafe impl ByteValued for hvm_modlist_entry {}
-
 impl BootConfigurator for PvhBootConfigurator {
     /// Writes the boot parameters (configured elsewhere) into guest memory.
     ///
@@ -108,7 +95,7 @@ impl BootConfigurator for PvhBootConfigurator {
     /// # use linux_loader::configurator::{BootConfigurator, BootParams};
     /// # use linux_loader::configurator::pvh::PvhBootConfigurator;
     /// # use linux_loader::loader::elf::start_info::{hvm_start_info, hvm_memmap_table_entry};
-    /// # use vm_memory::{Address, ByteValued, GuestMemoryBackend, GuestMemoryMmap, GuestAddress};
+    /// # use vm_memory::{Address,  GuestMemoryBackend, GuestMemoryMmap, GuestAddress};
     /// # const XEN_HVM_START_MAGIC_VALUE: u32 = 0x336ec578;
     /// # const MEM_SIZE: u64 = 0x100_0000;
     /// # const E820_RAM: u32 = 1;
@@ -184,6 +171,7 @@ impl BootConfigurator for PvhBootConfigurator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::start_info::{hvm_memmap_table_entry, hvm_modlist_entry, hvm_start_info};
     use std::mem;
     use vm_memory::{Address, GuestAddress, GuestMemoryMmap};
 

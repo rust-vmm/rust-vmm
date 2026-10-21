@@ -19,6 +19,7 @@ log = "0.4.17"
 virtio-queue = { workspace = true }
 virtio-device = { workspace = true }
 virtio-bindings = { workspace = true }
+zerocopy = { workspace = true }
 
 [dev-dependencies]
 vm-memory = { workspace = true, features = ["backend-mmap", "backend-atomic"] }

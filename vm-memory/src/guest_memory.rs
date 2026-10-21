@@ -926,11 +926,11 @@ mod tests {
 
     use super::*;
     #[cfg(feature = "backend-mmap")]
-    use crate::bytes::ByteValued;
-    #[cfg(feature = "backend-mmap")]
     use crate::GuestAddress;
     #[cfg(feature = "backend-mmap")]
     use std::time::{Duration, Instant};
+    #[cfg(feature = "backend-mmap")]
+    use zerocopy::{FromBytes, IntoBytes};
 
     use vmm_sys_util::tempfile::TempFile;
 
@@ -1004,7 +1004,11 @@ mod tests {
     #[cfg(not(miri))] // This test simulates a race condition between guest and vmm
     fn non_atomic_access_helper<T>()
     where
-        T: ByteValued
+        T: Copy
+            + Send
+            + Sync
+            + FromBytes
+            + IntoBytes
             + std::fmt::Debug
             + From<u8>
             + Into<u128>
@@ -1014,22 +1018,13 @@ mod tests {
         use std::mem;
         use std::thread;
 
-        // A dummy type that's always going to have the same alignment as the first member,
-        // and then adds some bytes at the end.
-        #[derive(Clone, Copy, Debug, Default, PartialEq)]
+        // A dummy type that has its alignment removed and then adds some bytes at the end.
+        #[derive(Clone, Copy, Debug, Default, PartialEq, FromBytes, IntoBytes)]
+        #[repr(C, packed)]
         struct Data<T> {
             val: T,
             some_bytes: [u8; 8],
         }
-
-        // Some sanity checks.
-        assert_eq!(mem::align_of::<T>(), mem::align_of::<Data<T>>());
-        assert_eq!(mem::size_of::<T>(), mem::align_of::<T>());
-
-        // There must be no padding bytes, as otherwise implementing ByteValued is UB
-        assert_eq!(mem::size_of::<Data<T>>(), mem::size_of::<T>() + 8);
-
-        unsafe impl<T: ByteValued> ByteValued for Data<T> {}
 
         // Start of first guest memory region.
         let start = GuestAddress(0);
@@ -1102,13 +1097,11 @@ mod tests {
     #[cfg(feature = "backend-mmap")]
     #[test]
     fn test_zero_length_accesses() {
-        #[derive(Default, Clone, Copy)]
+        #[derive(Default, Clone, Copy, FromBytes, IntoBytes)]
         #[repr(C)]
         struct ZeroSizedStruct {
             dummy: [u32; 0],
         }
-
-        unsafe impl ByteValued for ZeroSizedStruct {}
 
         let addr = GuestAddress(0x1000);
         let mem = GuestMemoryMmap::from_ranges(&[(addr, 0x1000)]).unwrap();

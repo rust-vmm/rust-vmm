@@ -14,9 +14,8 @@
 use std::fmt;
 use std::io::{Read, Seek, SeekFrom};
 
-use vm_memory::{
-    Address, ByteValued, Bytes, GuestAddress, GuestMemoryBackend, GuestUsize, ReadVolatile,
-};
+use vm_memory::{Address, Bytes, GuestAddress, GuestMemoryBackend, GuestUsize, ReadVolatile};
+use zerocopy::{FromBytes, Immutable, IntoBytes};
 
 use crate::loader::{Error as KernelLoaderError, KernelLoader, KernelLoaderResult, Result};
 
@@ -62,7 +61,7 @@ impl std::error::Error for Error {}
 
 #[cfg(target_arch = "aarch64")]
 #[repr(C)]
-#[derive(Debug, Copy, Clone, Default)]
+#[derive(Debug, Copy, Clone, Default, FromBytes, IntoBytes, Immutable)]
 #[allow(missing_docs)]
 // See kernel doc Documentation/arm64/booting.txt for more information.
 // All these fields should be little endian.
@@ -79,14 +78,9 @@ pub struct arm64_image_header {
     pub res5: u32,
 }
 
-#[cfg(target_arch = "aarch64")]
-// SAFETY: The layout of the structure is fixed and can be initialized by
-// reading its content from byte array.
-unsafe impl ByteValued for arm64_image_header {}
-
 #[cfg(target_arch = "riscv64")]
 #[repr(C)]
-#[derive(Debug, Copy, Clone, Default)]
+#[derive(Debug, Copy, Clone, Default, FromBytes, IntoBytes, Immutable)]
 #[allow(missing_docs)]
 // See kernel doc Documentation/arch/riscv/boot-image-header.rst
 // All these fields should be little endian.
@@ -103,11 +97,6 @@ pub struct riscv64_image_header {
     pub magic2: u32,
     pub res3: u32,
 }
-
-#[cfg(target_arch = "riscv64")]
-// SAFETY: The layout of the structure is fixed and can be initialized by
-// reading its content from byte array.
-unsafe impl ByteValued for riscv64_image_header {}
 
 impl KernelLoader for PE {
     /// Loads a PE Image into guest memory.
@@ -142,7 +131,7 @@ impl KernelLoader for PE {
         kernel_image.rewind().map_err(|_| Error::SeekImageHeader)?;
 
         kernel_image
-            .read_exact(image_header.as_mut_slice())
+            .read_exact(image_header.as_mut_bytes())
             .map_err(|_| Error::ReadImageHeader)?;
 
         #[cfg(target_arch = "aarch64")]

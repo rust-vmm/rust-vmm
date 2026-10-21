@@ -24,8 +24,6 @@ use std::fmt;
 use std::io::SeekFrom;
 use std::io::{Read, Seek};
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-use vm_memory::ByteValued;
 use vm_memory::{Address, Bytes, GuestAddress, GuestMemoryBackend, GuestUsize, ReadVolatile};
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
@@ -211,16 +209,6 @@ pub trait KernelLoader {
     where
         F: Read + ReadVolatile + Seek;
 }
-
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-// SAFETY: The layout of the structure is fixed and can be initialized by
-// reading its content from byte array.
-unsafe impl ByteValued for bootparam::setup_header {}
-
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-// SAFETY: The layout of the structure is fixed and can be initialized by
-// reading its content from byte array.
-unsafe impl ByteValued for bootparam::boot_params {}
 
 /// Writes the command line string to the given guest memory slice.
 ///

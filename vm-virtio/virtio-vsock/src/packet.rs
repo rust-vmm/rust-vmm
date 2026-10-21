@@ -38,9 +38,11 @@ use std::ops::Deref;
 use virtio_queue::DescriptorChain;
 use vm_memory::bitmap::{BitmapSlice, WithBitmapSlice};
 use vm_memory::{
-    Address, ByteValued, Bytes, GuestAddress, GuestMemory, GuestMemoryError, Le16, Le32, Le64,
-    Permissions, VolatileMemoryError, VolatileSlice,
+    Address, Bytes, GuestAddress, GuestMemory, GuestMemoryError, Permissions, VolatileMemoryError,
+    VolatileSlice,
 };
+use zerocopy::little_endian::{U16, U32, U64};
+use zerocopy::{FromBytes, Immutable, IntoBytes};
 
 /// Vsock packet parsing errors.
 #[derive(Debug)]
@@ -109,25 +111,20 @@ impl Display for Error {
 }
 
 #[repr(C, packed)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, FromBytes, IntoBytes, Immutable)]
 /// The vsock packet header structure.
 pub struct PacketHeader {
-    src_cid: Le64,
-    dst_cid: Le64,
-    src_port: Le32,
-    dst_port: Le32,
-    len: Le32,
-    type_: Le16,
-    op: Le16,
-    flags: Le32,
-    buf_alloc: Le32,
-    fwd_cnt: Le32,
+    src_cid: U64,
+    dst_cid: U64,
+    src_port: U32,
+    dst_port: U32,
+    len: U32,
+    type_: U16,
+    op: U16,
+    flags: U32,
+    buf_alloc: U32,
+    fwd_cnt: U32,
 }
-
-// SAFETY: This is safe because `PacketHeader` contains only wrappers over POD types
-// and all accesses through safe `vm-memory` API will validate any garbage that could
-// be included in there.
-unsafe impl ByteValued for PacketHeader {}
 //
 // This structure will occupy the buffer pointed to by the head of the descriptor chain. Below are
 // the offsets for each field, as well as the packed structure size.

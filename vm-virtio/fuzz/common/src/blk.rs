@@ -20,18 +20,17 @@ pub mod tests {
     use virtio_bindings::bindings::virtio_ring::{VRING_DESC_F_NEXT, VRING_DESC_F_WRITE};
     use virtio_blk::request::{Request, RequestType};
     use virtio_queue::{desc::RawDescriptor, mock::MockSplitQueue};
-    use vm_memory::{ByteValued, Bytes, GuestAddress, GuestMemoryMmap};
+    use vm_memory::{Bytes, GuestAddress, GuestMemoryMmap};
+    use zerocopy::{FromBytes, Immutable, IntoBytes};
 
     // The same as the RequestHeader type in virtio_blk, with exposed fields
-    #[derive(Clone, Copy, Debug, Default, PartialEq)]
+    #[derive(Clone, Copy, Debug, Default, PartialEq, FromBytes, IntoBytes, Immutable)]
     #[repr(C)]
     struct FuzzingBlkRequestHdr {
         request_type: u32,
         _reserved: u32,
         sector: u64,
     }
-
-    unsafe impl ByteValued for FuzzingBlkRequestHdr {}
 
     // Test values for the descriptor chain
     const REQ_TYPE: u32 = VIRTIO_BLK_T_IN;
@@ -53,7 +52,7 @@ pub mod tests {
             _reserved: 0,
             sector: REQ_SECTOR,
         };
-        mem.write_slice(header.as_slice(), GuestAddress(HEADER_ADDR))
+        mem.write_slice(header.as_bytes(), GuestAddress(HEADER_ADDR))
             .unwrap();
 
         // Initialize data and status memory

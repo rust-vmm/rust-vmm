@@ -18,26 +18,13 @@ use std::mem;
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 use std::result;
 
-use vm_memory::{
-    Address, ByteValued, Bytes, GuestAddress, GuestMemoryBackend, GuestUsize, ReadVolatile,
-};
+use vm_memory::{Address, Bytes, GuestAddress, GuestMemoryBackend, GuestUsize, ReadVolatile};
+use zerocopy::IntoBytes;
 
 use crate::loader::{Error as KernelLoaderError, KernelLoader, KernelLoaderResult, Result};
 use crate::loader_gen::elf;
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 pub use crate::loader_gen::start_info;
-
-// SAFETY: The layout of the structure is fixed and can be initialized by
-// reading its content from byte array.
-unsafe impl ByteValued for elf::Elf64_Ehdr {}
-
-// SAFETY: The layout of the structure is fixed and can be initialized by
-// reading its content from byte array.
-unsafe impl ByteValued for elf::Elf64_Nhdr {}
-
-// SAFETY: The layout of the structure is fixed and can be initialized by
-// reading its content from byte array.
-unsafe impl ByteValued for elf::Elf64_Phdr {}
 
 #[derive(Debug, PartialEq, Eq)]
 /// Elf kernel loader errors.
@@ -225,7 +212,7 @@ impl KernelLoader for Elf {
 
         let mut ehdr = elf::Elf64_Ehdr::default();
         kernel_image
-            .read_exact(ehdr.as_mut_slice())
+            .read_exact(ehdr.as_mut_bytes())
             .map_err(|_| Error::ReadElfHeader)?;
 
         // Sanity checks.
@@ -257,7 +244,7 @@ impl KernelLoader for Elf {
         for _ in 0usize..ehdr.e_phnum as usize {
             let mut phdr = elf::Elf64_Phdr::default();
             kernel_image
-                .read_exact(phdr.as_mut_slice())
+                .read_exact(phdr.as_mut_bytes())
                 .map_err(|_| Error::ReadProgramHeader)?;
             phdrs.push(phdr);
         }
@@ -357,7 +344,7 @@ where
 
     while read_size < phdr.p_filesz as usize {
         kernel_image
-            .read_exact(nhdr.as_mut_slice())
+            .read_exact(nhdr.as_mut_bytes())
             .map_err(|_| Error::ReadNoteHeader)?;
 
         // Check if the note header's name and type match the ones specified by the PVH ABI.

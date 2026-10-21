@@ -4,6 +4,9 @@
 
 ## Changed
 
+- \[[#52](https://github.com/rust-vmm/rust-vmm/pull/52)\] Replaced `ByteValued` trait implementations with `zerocopy` traits.
+  Replaced `vm-memory`'s endian types with `zerocopy` equivalents.
+
 ## Fixed
 
 # v0.12.0

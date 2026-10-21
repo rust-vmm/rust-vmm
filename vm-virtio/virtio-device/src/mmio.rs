@@ -225,7 +225,7 @@ mod tests {
     use crate::virtio_config::tests::Dummy;
 
     use super::*;
-    use vm_memory::ByteValued;
+    use zerocopy::IntoBytes;
 
     fn mmio_read<D>(d: &D, offset: u64) -> u32
     where
@@ -260,12 +260,12 @@ mod tests {
         assert_eq!(mmio_read(&d, 0x10), 0);
 
         // Attempt to write some feature acknowledged by the driver.
-        d.write(0x20, driver_features.as_slice());
+        d.write(0x20, driver_features.as_bytes());
         // Nothing happens because the device status is no appropriate.
         assert_eq!(d.cfg.driver_features, 0);
 
         d.cfg.device_status = status::DRIVER;
-        d.write(0x20, driver_features.as_slice());
+        d.write(0x20, driver_features.as_bytes());
         assert_eq!(d.cfg.driver_features, driver_features as u64);
 
         d.write(0x24, &1u32.to_le_bytes());

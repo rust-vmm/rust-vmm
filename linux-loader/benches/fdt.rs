@@ -15,7 +15,8 @@ use std::hint::black_box;
 
 use linux_loader::configurator::fdt::FdtBootConfigurator;
 use linux_loader::configurator::{BootConfigurator, BootParams};
-use vm_memory::{ByteValued, GuestAddress, GuestMemoryMmap};
+use vm_memory::{GuestAddress, GuestMemoryMmap};
+use zerocopy::{FromBytes, Immutable, IntoBytes};
 
 use criterion::Criterion;
 
@@ -26,13 +27,9 @@ fn create_guest_memory() -> GuestMemoryMmap {
     GuestMemoryMmap::from_ranges(&[(GuestAddress(0x0), MEM_SIZE)]).unwrap()
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, FromBytes, IntoBytes, Immutable)]
 #[allow(dead_code)]
 pub struct FdtPlaceholder([u8; FDT_MAX_SIZE]);
-
-// SAFETY: The layout of the structure is fixed and can be initialized by
-// reading its content from byte array.
-unsafe impl ByteValued for FdtPlaceholder {}
 
 fn build_fdt_boot_params() -> BootParams {
     let fdt = FdtPlaceholder([0u8; FDT_MAX_SIZE]);

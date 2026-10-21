@@ -1,6 +1,7 @@
 //! Descriptor types for virtio queue.
 
-use vm_memory::{ByteValued, Le16, Le32, Le64};
+use zerocopy::little_endian::{U16, U32, U64};
+use zerocopy::{FromBytes, Immutable, IntoBytes};
 
 pub mod packed;
 pub mod split;
@@ -15,21 +16,16 @@ pub type Descriptor = RawDescriptor;
 /// This type corresponds to struct virtq_desc, see:
 /// <https://docs.oasis-open.org/virtio/virtio/v1.3/csd01/virtio-v1.3-csd01.html#x1-720008>
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default)]
-pub struct RawDescriptor(Le64, Le32, Le16, Le16);
-
-// SAFETY: This is safe because `Descriptor` contains only wrappers over POD types and
-// all accesses through safe `vm-memory` API will validate any garbage that could be
-// included in there.
-unsafe impl ByteValued for RawDescriptor {}
+#[derive(Clone, Copy, Debug, Default, FromBytes, IntoBytes, Immutable)]
+pub struct RawDescriptor(U64, U32, U16, U16);
 
 impl From<split::Descriptor> for RawDescriptor {
     fn from(desc: split::Descriptor) -> Self {
         RawDescriptor(
-            Le64::from(desc.addr().0),
-            Le32::from(desc.len()),
-            Le16::from(desc.flags()),
-            Le16::from(desc.next()),
+            U64::from(desc.addr().0),
+            U32::from(desc.len()),
+            U16::from(desc.flags()),
+            U16::from(desc.next()),
         )
     }
 }
@@ -37,10 +33,10 @@ impl From<split::Descriptor> for RawDescriptor {
 impl From<packed::Descriptor> for RawDescriptor {
     fn from(desc: packed::Descriptor) -> Self {
         RawDescriptor(
-            Le64::from(desc.addr().0),
-            Le32::from(desc.len()),
-            Le16::from(desc.id()),
-            Le16::from(desc.flags()),
+            U64::from(desc.addr().0),
+            U32::from(desc.len()),
+            U16::from(desc.id()),
+            U16::from(desc.flags()),
         )
     }
 }
@@ -59,47 +55,46 @@ impl From<RawDescriptor> for packed::Descriptor {
 
 #[cfg(test)]
 mod tests {
-    use vm_memory::{Le16, Le32, Le64};
 
-    use super::{packed, split, RawDescriptor};
+    use super::{packed, split, RawDescriptor, U16, U32, U64};
 
     #[test]
     fn test_desc_from_split() {
         let split_desc = split::Descriptor::new(1, 2, 3, 4);
         let desc = RawDescriptor::from(split_desc);
-        assert_eq!(split_desc.addr().0, desc.0);
-        assert_eq!(split_desc.len(), desc.1);
-        assert_eq!(split_desc.flags(), desc.2);
-        assert_eq!(split_desc.next(), desc.3);
+        assert_eq!(split_desc.addr().0, desc.0.get());
+        assert_eq!(split_desc.len(), desc.1.get());
+        assert_eq!(split_desc.flags(), desc.2.get());
+        assert_eq!(split_desc.next(), desc.3.get());
     }
 
     #[test]
     fn test_split_from_desc() {
-        let desc = RawDescriptor(Le64::from(1), Le32::from(2), Le16::from(3), Le16::from(4));
+        let desc = RawDescriptor(U64::from(1), U32::from(2), U16::from(3), U16::from(4));
         let split_desc = split::Descriptor::from(desc);
-        assert_eq!(split_desc.addr().0, desc.0);
-        assert_eq!(split_desc.len(), desc.1);
-        assert_eq!(split_desc.flags(), desc.2);
-        assert_eq!(split_desc.next(), desc.3);
+        assert_eq!(split_desc.addr().0, desc.0.get());
+        assert_eq!(split_desc.len(), desc.1.get());
+        assert_eq!(split_desc.flags(), desc.2.get());
+        assert_eq!(split_desc.next(), desc.3.get());
     }
 
     #[test]
     fn test_desc_from_packed() {
         let packed_desc = packed::Descriptor::new(1, 2, 3, 4);
         let desc = RawDescriptor::from(packed_desc);
-        assert_eq!(packed_desc.addr().0, desc.0);
-        assert_eq!(packed_desc.len(), desc.1);
-        assert_eq!(packed_desc.id(), desc.2);
-        assert_eq!(packed_desc.flags(), desc.3);
+        assert_eq!(packed_desc.addr().0, desc.0.get());
+        assert_eq!(packed_desc.len(), desc.1.get());
+        assert_eq!(packed_desc.id(), desc.2.get());
+        assert_eq!(packed_desc.flags(), desc.3.get());
     }
 
     #[test]
     fn test_packed_from_desc() {
-        let desc = RawDescriptor(Le64::from(1), Le32::from(2), Le16::from(3), Le16::from(4));
+        let desc = RawDescriptor(U64::from(1), U32::from(2), U16::from(3), U16::from(4));
         let packed_desc = packed::Descriptor::from(desc);
-        assert_eq!(packed_desc.addr().0, desc.0);
-        assert_eq!(packed_desc.len(), desc.1);
-        assert_eq!(packed_desc.id(), desc.2);
-        assert_eq!(packed_desc.flags(), desc.3);
+        assert_eq!(packed_desc.addr().0, desc.0.get());
+        assert_eq!(packed_desc.len(), desc.1.get());
+        assert_eq!(packed_desc.id(), desc.2.get());
+        assert_eq!(packed_desc.flags(), desc.3.get());
     }
 }

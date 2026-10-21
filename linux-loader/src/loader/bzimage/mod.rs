@@ -15,8 +15,9 @@ use std::fmt;
 use std::io::{Seek, SeekFrom};
 
 use vm_memory::{
-    Address, ByteValued, Bytes, GuestAddress, GuestMemoryBackend, GuestUsize, ReadVolatile,
+    Address, Bytes, GuestAddress, GuestMemoryBackend, GuestUsize, ReadVolatile, VolatileSlice,
 };
+use zerocopy::IntoBytes;
 
 use crate::loader::{
     bootparam, Error as KernelLoaderError, KernelLoader, KernelLoaderResult, Result,
@@ -120,7 +121,7 @@ impl KernelLoader for BzImage {
 
         let mut boot_header = bootparam::setup_header::default();
         kernel_image
-            .read_volatile(&mut boot_header.as_bytes())
+            .read_volatile(&mut VolatileSlice::from(boot_header.as_mut_bytes()))
             .map_err(|_| Error::ReadBzImageHeader)?;
 
         // If the `HdrS` magic number is not found at offset 0x202, the boot protocol version is
