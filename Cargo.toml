@@ -11,6 +11,7 @@ members = [
   "seccompiler",
   "vm-allocator",
   "vm-device",
+  "vm-fdt",
   "vm-memory",
   "vmm-sys-util",
   "vm-virtio/virtio-bindings",
