@@ -11,7 +11,7 @@ seccomp filters:
 {
     "vmm": {
        "mismatch_action": {
-            "errno" : -1
+            "errno" : 1
        },
        "match_action": "allow",
        "filter": [...]
