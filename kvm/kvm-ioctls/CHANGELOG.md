@@ -2,6 +2,10 @@
 
 ## Upcoming Release
 
+### Added
+
+- [[#198]](https://github.com/rust-vmm/rust-vmm/pull/198) Add TDX support.
+
 ## v0.25.1
 
 ### Changed

@@ -47,6 +47,90 @@ impl PartialEq for kvm_cpuid2 {
 /// [FamStructWrapper](../vmm_sys_util/fam/struct.FamStructWrapper.html).
 pub type CpuId = FamStructWrapper<kvm_cpuid2>;
 
+// SAFETY:
+// - `kvm_tdx_init_vm` is `#[repr(C)]` and contains only POD fields.
+// - The flexible array part is `cpuid.entries`, which sits at offset
+//   `size_of::<kvm_tdx_init_vm>()`, i.e. immediately past the header.
+// - `kvm_cpuid_entry2` is a POD.
+unsafe impl FamStruct for kvm_tdx_init_vm {
+    type Entry = kvm_cpuid_entry2;
+
+    fn len(&self) -> usize {
+        self.cpuid.nent as usize
+    }
+
+    unsafe fn set_len(&mut self, len: usize) {
+        self.cpuid.nent = len as u32;
+    }
+
+    fn max_len() -> usize {
+        KVM_MAX_CPUID_ENTRIES
+    }
+
+    fn as_slice(&self) -> &[<Self as FamStruct>::Entry] {
+        let len = self.len();
+        // SAFETY: By the invariants that the caller of `set_len` has to uphold, `len` matches
+        // the actual in-memory length of the FAM
+        unsafe { self.cpuid.entries.as_slice(len) }
+    }
+
+    fn as_mut_slice(&mut self) -> &mut [<Self as FamStruct>::Entry] {
+        let len = self.len();
+        // SAFETY: By the invariants that the caller of `set_len` has to uphold, `len` matches
+        // the actual in-memory length of the FAM
+        unsafe { self.cpuid.entries.as_mut_slice(len) }
+    }
+}
+
+/// Wrapper over [`kvm_tdx_init_vm`].
+///
+/// The structure contains a kvm_cpuid2 flexible array member at the end.
+/// For more details see the
+/// [KVM TDX documentation](https://docs.kernel.org/virt/kvm/x86/intel-tdx.html).
+pub type TdxInitVm = FamStructWrapper<kvm_tdx_init_vm>;
+
+// SAFETY:
+// - `kvm_tdx_capabilities` is `#[repr(C)]` and contains only POD fields.
+// - The flexible array part is `cpuid.entries`, which sits at offset
+//   `size_of::<kvm_tdx_capabilities>()`, i.e. immediately past the header.
+// - `kvm_cpuid_entry2` is a POD.
+unsafe impl FamStruct for kvm_tdx_capabilities {
+    type Entry = kvm_cpuid_entry2;
+
+    fn len(&self) -> usize {
+        self.cpuid.nent as usize
+    }
+
+    unsafe fn set_len(&mut self, len: usize) {
+        self.cpuid.nent = len as u32;
+    }
+
+    fn max_len() -> usize {
+        KVM_MAX_CPUID_ENTRIES
+    }
+
+    fn as_slice(&self) -> &[<Self as FamStruct>::Entry] {
+        let len = self.len();
+        // SAFETY: By the invariants that the caller of `set_len` has to uphold, `len` matches
+        // the actual in-memory length of the FAM
+        unsafe { self.cpuid.entries.as_slice(len) }
+    }
+
+    fn as_mut_slice(&mut self) -> &mut [<Self as FamStruct>::Entry] {
+        let len = self.len();
+        // SAFETY: By the invariants that the caller of `set_len` has to uphold, `len` matches
+        // the actual in-memory length of the FAM
+        unsafe { self.cpuid.entries.as_mut_slice(len) }
+    }
+}
+
+/// Wrapper over [`kvm_tdx_capabilities`].
+///
+/// The structure contains a kvm_cpuid2 flexible array member at the end which
+///  For more details see the
+/// [KVM TDX documentation](https://docs.kernel.org/virt/kvm/x86/intel-tdx.html).
+pub type TdxCapabilities = FamStructWrapper<kvm_tdx_capabilities>;
+
 // Implement the FamStruct trait for kvm_msrs.
 generate_fam_struct_impl!(
     kvm_msrs,
@@ -266,6 +350,65 @@ mod tests {
         assert_eq!(wrapper.as_fam_struct_ref().len(), 1);
         assert_eq!(wrapper.as_fam_struct_ref().len, 1);
     }
+    #[test]
+    fn test_tdx_capabilities() {
+        let entries = [
+            kvm_cpuid_entry2 {
+                function: 1,
+                ..Default::default()
+            },
+            kvm_cpuid_entry2 {
+                function: 2,
+                ..Default::default()
+            },
+        ];
+        let mut caps = TdxCapabilities::new(2).unwrap();
+        assert_eq!(caps.as_slice().len(), 2);
+
+        // The entries follow the outer TDX header, including its nested cpuid header.
+        let entries_address =
+            caps.as_fam_struct_ptr() as usize + std::mem::size_of::<kvm_tdx_capabilities>();
+        assert_eq!(caps.as_slice().as_ptr() as usize, entries_address);
+        assert_eq!(caps.as_mut_slice().as_ptr() as usize, entries_address);
+
+        caps.as_mut_slice().copy_from_slice(&entries);
+        assert_eq!(caps.as_slice(), &entries);
+        assert_eq!(caps.as_fam_struct_ref().cpuid.nent, 2);
+        assert_eq!(caps.as_fam_struct_ref().supported_attrs, 0);
+
+        let caps = TdxCapabilities::new(KVM_MAX_CPUID_ENTRIES).unwrap();
+        assert_eq!(caps.as_slice().len(), KVM_MAX_CPUID_ENTRIES);
+        TdxCapabilities::new(KVM_MAX_CPUID_ENTRIES + 1).unwrap_err();
+    }
+
+    #[test]
+    fn test_tdx_init_vm() {
+        let entries = [
+            kvm_cpuid_entry2 {
+                function: 1,
+                ..Default::default()
+            },
+            kvm_cpuid_entry2 {
+                function: 2,
+                ..Default::default()
+            },
+        ];
+        let mut init_vm = TdxInitVm::from_entries(&entries).unwrap();
+        assert_eq!(init_vm.as_slice(), &entries);
+        assert_eq!(init_vm.as_fam_struct_ref().cpuid.nent, 2);
+        assert_eq!(init_vm.as_fam_struct_ref().attributes, 0);
+
+        // The entries follow the outer TDX header, including its nested cpuid header.
+        let entries_address =
+            init_vm.as_fam_struct_ptr() as usize + std::mem::size_of::<kvm_tdx_init_vm>();
+        assert_eq!(init_vm.as_slice().as_ptr() as usize, entries_address);
+        assert_eq!(init_vm.as_mut_slice().as_ptr() as usize, entries_address);
+
+        let init_vm = TdxInitVm::new(KVM_MAX_CPUID_ENTRIES).unwrap();
+        assert_eq!(init_vm.as_slice().len(), KVM_MAX_CPUID_ENTRIES);
+        TdxInitVm::new(KVM_MAX_CPUID_ENTRIES + 1).unwrap_err();
+    }
+
     #[test]
     fn test_kvm_irq_routing() {
         let wrapper = KvmIrqRouting::new(1).unwrap();
