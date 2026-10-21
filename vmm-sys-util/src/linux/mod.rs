@@ -9,6 +9,5 @@ pub mod eventfd;
 pub mod fallocate;
 pub mod poll;
 pub mod seek_hole;
-pub mod signal;
 pub mod timerfd;
 pub mod write_zeroes;

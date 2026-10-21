@@ -5,6 +5,12 @@
 ### Added
 
 - [[#254](https://github.com/rust-vmm/vmm-sys-util/pull/254)]: Support `TFD_NONBLOCK` for `timerfd::TimerFd`.
+- [[#16](https://github.com/rust-vmm/rust-vmm/pull/16)]: Make the `signal` module
+  support non-Linux Unix platforms (e.g. macOS). The implementation moves from the
+  internal `linux` module to `unix`, leaving the public path
+  `vmm_sys_util::signal` unchanged; real-time signals (`SIGRTMIN`/`SIGRTMAX`) and
+  `sigtimedwait` remain Linux/Android-only, with the portable `sigwait` standing
+  in for the latter elsewhere.
 
 ### Changed
 
