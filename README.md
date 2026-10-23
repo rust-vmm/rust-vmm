@@ -21,7 +21,7 @@ For more details about each crate, you can check their corresponding readme.
 ## Current Status
 
 This repository is still under construction as we're working towards merging
-all rust-vmm crates here. Once a crate/worspace is moved, its original
+all rust-vmm crates here. Once a crate/workspace is moved, its original
 repository becomes a public archive that can still be accessed. All future
 development moves to this repository.
 
