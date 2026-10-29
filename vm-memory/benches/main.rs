@@ -8,6 +8,8 @@ pub use criterion::{criterion_group, criterion_main, Criterion};
 #[cfg(feature = "backend-mmap")]
 use vm_memory::{GuestAddress, GuestMemoryMmap};
 
+#[cfg(feature = "backend-bitmap")]
+mod bitmap;
 mod guest_memory;
 mod mmap;
 mod volatile;
@@ -42,6 +44,18 @@ criterion_group! {
     targets = criterion_benchmark, benchmark_guest_memory, benchmark_for_volatile
 }
 
+pub fn benchmark_bitmap(_c: &mut Criterion) {
+    #[cfg(feature = "backend-bitmap")]
+    bitmap::benchmark_for_bitmap(_c);
+}
+
+criterion_group! {
+    name = bitmap_benches;
+    config = Criterion::default();
+    targets = benchmark_bitmap
+}
+
 criterion_main! {
     benches,
+    bitmap_benches,
 }
