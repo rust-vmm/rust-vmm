@@ -7,6 +7,7 @@
 - \[[#132](https://github.com/rust-vmm/rust-vmm/pull/132)\] Add fast paths for
   guest-memory reads, writes, and range checks that fit within a single memory
   region.
+- Speedup `AtomicBitmap::get_and_reset()` by factor 2-6x  for sparse bitmaps.
 
 ## 0.18.0
 
