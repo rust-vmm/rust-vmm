@@ -681,6 +681,10 @@ mod tests {
         IommuMemory,
     };
     use crate::{GuestAddress, Iotlb, Permissions};
+
+    #[cfg(all(feature = "backend-mmap", target_family = "windows"))]
+    pub use crate::mmap::windows::GuestMemoryResult; // rename for backwards compat
+
     use std::fmt::Debug;
     #[cfg(all(feature = "backend-bitmap", feature = "backend-mmap"))]
     use std::num::NonZeroUsize;
