@@ -46,7 +46,7 @@ pushd "$ARCH"_headers
 bindgen include/linux/kvm.h -o bindings.rs  \
      --impl-debug --with-derive-default --rust-edition 2024  \
      --with-derive-partialeq  --impl-partialeq \
-     -- -Iinclude
+     -- -Iinclude -D__cplusplus
 popd
 
 # Step 3: Copy the generated file to the arm64 module.

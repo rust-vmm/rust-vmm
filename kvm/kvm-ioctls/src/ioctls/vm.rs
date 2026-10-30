@@ -1831,6 +1831,61 @@ impl VmFd {
         unsafe { self.encrypt_op(op) }
     }
 
+    /// Issue common lifecycle events of TDX guests, such as launching, running
+    /// and decommissioning via `KVM_MEMORY_ENCRYPT_OP` ioctl.
+    ///
+    /// Note that on TDX, the NULL pointer detection mechanism (see
+    /// [`encrypt_op_sev`](Self::encrypt_op_sev)) does not work.
+    ///
+    /// Also note that while SEV encrypt ops always work on the VM,
+    /// some TDX ioctls work on the vCPU, in which case you must use
+    /// [`VcpuFd::encrypt_op_tdx()`].
+    ///
+    /// See the [KVM TDX documentation](https://docs.kernel.org/virt/kvm/x86/intel-tdx.html)
+    /// for more details.
+    ///
+    /// # Safety
+    ///
+    /// See safety concerns for [`VcpuFd::encrypt_op_tdx()`].
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # extern crate kvm_ioctls;
+    /// # extern crate kvm_bindings;
+    /// use kvm_bindings::bindings::{
+    ///     KVM_X86_TDX_VM, kvm_tdx_cmd, kvm_tdx_cmd_id_KVM_TDX_CAPABILITIES,
+    /// };
+    /// use kvm_bindings::{KVM_MAX_CPUID_ENTRIES, TdxCapabilities};
+    /// # use kvm_ioctls::{Kvm, Cap};
+    ///
+    /// let kvm = Kvm::new().unwrap();
+    ///
+    /// // Check that TDX is supported and create the VM
+    /// let vmtypes = kvm.check_extension_int(Cap::VmTypes);
+    /// if vmtypes & (1 << KVM_X86_TDX_VM) == 0 {
+    ///     return;
+    /// }
+    /// let vm = kvm.create_vm_with_type(KVM_X86_TDX_VM as u64).unwrap();
+    ///
+    /// // Get TDX capabilities. Pre-allocate the maximum CPUID count so the
+    /// // ioctl does not fail.
+    /// let mut caps = TdxCapabilities::new(KVM_MAX_CPUID_ENTRIES).unwrap();
+    /// let mut cmd = kvm_tdx_cmd {
+    ///     id: kvm_tdx_cmd_id_KVM_TDX_CAPABILITIES,
+    ///     data: caps.as_mut_fam_struct_ptr() as u64,
+    ///     ..Default::default()
+    /// };
+    /// // SAFETY: we never use `caps` again
+    /// unsafe { vm.encrypt_op_tdx(&mut cmd).unwrap() };
+    /// ```
+    #[cfg(target_arch = "x86_64")]
+    pub unsafe fn encrypt_op_tdx(&self, op: &mut kvm_tdx_cmd) -> Result<()> {
+        // SAFETY: Safe because we know that kernel will only read the correct amount of memory
+        // from our pointer and we know where it will write it (op.error).
+        unsafe { self.encrypt_op(op) }
+    }
+
     /// Register a guest memory region which may contain encrypted data.
     ///
     /// It is used in the SEV-enabled guest.
