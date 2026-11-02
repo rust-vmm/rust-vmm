@@ -967,10 +967,11 @@ pub struct kvm_riscv_config {
     pub mimpid: ::std::os::raw::c_ulong,
     pub zicboz_block_size: ::std::os::raw::c_ulong,
     pub satp_mode: ::std::os::raw::c_ulong,
+    pub zicbop_block_size: ::std::os::raw::c_ulong,
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
-    ["Size of kvm_riscv_config"][::std::mem::size_of::<kvm_riscv_config>() - 56usize];
+    ["Size of kvm_riscv_config"][::std::mem::size_of::<kvm_riscv_config>() - 64usize];
     ["Alignment of kvm_riscv_config"][::std::mem::align_of::<kvm_riscv_config>() - 8usize];
     ["Offset of field: kvm_riscv_config::isa"]
         [::std::mem::offset_of!(kvm_riscv_config, isa) - 0usize];
@@ -986,6 +987,8 @@ const _: () = {
         [::std::mem::offset_of!(kvm_riscv_config, zicboz_block_size) - 40usize];
     ["Offset of field: kvm_riscv_config::satp_mode"]
         [::std::mem::offset_of!(kvm_riscv_config, satp_mode) - 48usize];
+    ["Offset of field: kvm_riscv_config::zicbop_block_size"]
+        [::std::mem::offset_of!(kvm_riscv_config, zicbop_block_size) - 56usize];
 };
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
@@ -1195,7 +1198,16 @@ pub const KVM_RISCV_ISA_EXT_ID_KVM_RISCV_ISA_EXT_ZABHA: KVM_RISCV_ISA_EXT_ID = 6
 pub const KVM_RISCV_ISA_EXT_ID_KVM_RISCV_ISA_EXT_ZICCRSE: KVM_RISCV_ISA_EXT_ID = 68;
 pub const KVM_RISCV_ISA_EXT_ID_KVM_RISCV_ISA_EXT_ZAAMO: KVM_RISCV_ISA_EXT_ID = 69;
 pub const KVM_RISCV_ISA_EXT_ID_KVM_RISCV_ISA_EXT_ZALRSC: KVM_RISCV_ISA_EXT_ID = 70;
-pub const KVM_RISCV_ISA_EXT_ID_KVM_RISCV_ISA_EXT_MAX: KVM_RISCV_ISA_EXT_ID = 71;
+pub const KVM_RISCV_ISA_EXT_ID_KVM_RISCV_ISA_EXT_ZICBOP: KVM_RISCV_ISA_EXT_ID = 71;
+pub const KVM_RISCV_ISA_EXT_ID_KVM_RISCV_ISA_EXT_ZFBFMIN: KVM_RISCV_ISA_EXT_ID = 72;
+pub const KVM_RISCV_ISA_EXT_ID_KVM_RISCV_ISA_EXT_ZVFBFMIN: KVM_RISCV_ISA_EXT_ID = 73;
+pub const KVM_RISCV_ISA_EXT_ID_KVM_RISCV_ISA_EXT_ZVFBFWMA: KVM_RISCV_ISA_EXT_ID = 74;
+pub const KVM_RISCV_ISA_EXT_ID_KVM_RISCV_ISA_EXT_ZCLSD: KVM_RISCV_ISA_EXT_ID = 75;
+pub const KVM_RISCV_ISA_EXT_ID_KVM_RISCV_ISA_EXT_ZILSD: KVM_RISCV_ISA_EXT_ID = 76;
+pub const KVM_RISCV_ISA_EXT_ID_KVM_RISCV_ISA_EXT_ZALASR: KVM_RISCV_ISA_EXT_ID = 77;
+pub const KVM_RISCV_ISA_EXT_ID_KVM_RISCV_ISA_EXT_ZICFILP: KVM_RISCV_ISA_EXT_ID = 78;
+pub const KVM_RISCV_ISA_EXT_ID_KVM_RISCV_ISA_EXT_ZICFISS: KVM_RISCV_ISA_EXT_ID = 79;
+pub const KVM_RISCV_ISA_EXT_ID_KVM_RISCV_ISA_EXT_MAX: KVM_RISCV_ISA_EXT_ID = 80;
 pub type KVM_RISCV_ISA_EXT_ID = ::std::os::raw::c_uint;
 pub const KVM_RISCV_SBI_EXT_ID_KVM_RISCV_SBI_EXT_V01: KVM_RISCV_SBI_EXT_ID = 0;
 pub const KVM_RISCV_SBI_EXT_ID_KVM_RISCV_SBI_EXT_TIME: KVM_RISCV_SBI_EXT_ID = 1;
