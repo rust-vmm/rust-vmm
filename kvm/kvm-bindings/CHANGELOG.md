@@ -2,6 +2,14 @@
 
 ## Upcoming Release
 
+### Added
+
+- The guest_memfd definitions ported from Linux 7.4-rc1:
+  `KVM_CAP_GUEST_MEMFD_FLAGS`, `KVM_CAP_GUEST_MEMFD_MEMORY_ATTRIBUTES`,
+  `GUEST_MEMFD_FLAG_MMAP`, `GUEST_MEMFD_FLAG_INIT_SHARED` and the
+  `kvm_memory_attributes2` request in the x86_64, arm64 and riscv64
+  bindings.
+
 ## v0.14.2
 
 ### Added
