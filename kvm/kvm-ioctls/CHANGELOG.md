@@ -2,6 +2,11 @@
 
 ## Upcoming Release
 
+### Added
+
+- Guest memory file capability queries:
+  `Cap::GuestMemfdFlags` and `Cap::GuestMemfdMemoryAttributes`.
+
 ## v0.25.1
 
 ### Changed
