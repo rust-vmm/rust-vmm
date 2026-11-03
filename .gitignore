@@ -9,3 +9,5 @@ Cargo.lock
 kcov_output
 **/.pytest_cache/
 **/__pycache__/*
+/build
+/kcov_build

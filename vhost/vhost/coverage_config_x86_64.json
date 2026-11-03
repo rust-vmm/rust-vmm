@@ -1,0 +1,5 @@
+{
+  "coverage_score": 88.78,
+  "exclude_path": "src/vhost_kern/",
+  "crate_features": "vhost-user-frontend,vhost-user-backend"
+}
