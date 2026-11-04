@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 pub mod event;
 pub mod file_traits;
+pub mod signal;
 pub mod sock_ctrl_msg;
 pub mod tempdir;
 pub mod terminal;
