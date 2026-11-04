@@ -17,7 +17,7 @@ pub const KVM_MAX_MSR_ENTRIES: usize = 256;
 generate_fam_struct_impl!(
     kvm_cpuid2,
     kvm_cpuid_entry2,
-    entries,
+    __bindgen_anon_1.entries,
     u32,
     nent,
     KVM_MAX_CPUID_ENTRIES
@@ -51,7 +51,7 @@ pub type CpuId = FamStructWrapper<kvm_cpuid2>;
 generate_fam_struct_impl!(
     kvm_msrs,
     kvm_msr_entry,
-    entries,
+    __bindgen_anon_1.entries,
     u32,
     nmsrs,
     KVM_MAX_MSR_ENTRIES
@@ -84,7 +84,7 @@ pub const KVM_MAX_IRQ_ROUTES: usize = 4096;
 generate_fam_struct_impl!(
     kvm_irq_routing,
     kvm_irq_routing_entry,
-    entries,
+    __bindgen_anon_1.entries,
     u32,
     nr,
     KVM_MAX_IRQ_ROUTES
@@ -107,7 +107,14 @@ impl PartialEq for kvm_irq_routing {
 pub type KvmIrqRouting = FamStructWrapper<kvm_irq_routing>;
 
 // Implement the FamStruct trait for kvm_msr_list.
-generate_fam_struct_impl!(kvm_msr_list, u32, indices, u32, nmsrs, KVM_MAX_MSR_ENTRIES);
+generate_fam_struct_impl!(
+    kvm_msr_list,
+    u32,
+    __bindgen_anon_1.indices,
+    u32,
+    nmsrs,
+    KVM_MAX_MSR_ENTRIES
+);
 
 // Implement the PartialEq trait for kvm_msr_list.
 impl PartialEq for kvm_msr_list {
@@ -176,14 +183,14 @@ unsafe impl FamStruct for kvm_xsave2 {
         let len = self.len();
         // SAFETY: By the invariants that the caller of `set_len` has to uphold, `len` matches
         // the actual in-memory length of the FAM
-        unsafe { self.xsave.extra.as_slice(len) }
+        unsafe { self.xsave.__bindgen_anon_1.extra.as_slice(len) }
     }
 
     fn as_mut_slice(&mut self) -> &mut [<Self as FamStruct>::Entry] {
         let len = self.len();
         // SAFETY: By the invariants that the caller of `set_len` has to uphold, `len` matches
         // the actual in-memory length of the FAM
-        unsafe { self.xsave.extra.as_mut_slice(len) }
+        unsafe { self.xsave.__bindgen_anon_1.extra.as_mut_slice(len) }
     }
 }
 

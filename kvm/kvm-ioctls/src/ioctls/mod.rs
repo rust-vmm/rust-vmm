@@ -97,7 +97,7 @@ impl KvmCoalescedIoRing {
             return None;
         }
 
-        let entries = ring.coalesced_mmio.as_ptr();
+        let entries = ring.__bindgen_anon_1.coalesced_mmio.as_ptr();
         // SAFETY: `ring.first` is an `u32` coming from mapped memory filled
         // by the kernel, so we trust it. `entries` is a pointer coming from
         // mmap(), so pointer arithmetic cannot overflow. We have a `&mut self`,
