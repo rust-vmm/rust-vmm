@@ -1518,14 +1518,15 @@ mod tests {
     fn misaligned_ref() {
         let mut a = [0u8; 3];
         let a_ref = VolatileSlice::from(&mut a[..]);
+        // SAFETY: Any created reference is dropped by `is_err()` before the next one is created.
+        // This ensures we don't call `aligned_ref` while another reference to the same memory is live.
         unsafe {
-            let result0 = a_ref.aligned_as_ref::<u16>(0);
-            let result1 = a_ref.aligned_as_ref::<u16>(1);
-            assert_matches!((result0, result1), (Ok(_), Err(_)) | (Err(_), Ok(_)));
-
-            let result0 = a_ref.aligned_as_mut::<u16>(0);
-            let result1 = a_ref.aligned_as_mut::<u16>(1);
-            assert_matches!((result0, result1), (Ok(_), Err(_)) | (Err(_), Ok(_)));
+            assert!(
+                a_ref.aligned_as_ref::<u16>(0).is_err() ^ a_ref.aligned_as_ref::<u16>(1).is_err()
+            );
+            assert!(
+                a_ref.aligned_as_mut::<u16>(0).is_err() ^ a_ref.aligned_as_mut::<u16>(1).is_err()
+            );
         }
     }
 
