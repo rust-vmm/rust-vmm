@@ -1,6 +1,7 @@
 **/*.rs.bk
 .idea
 /target
+/mshv/build
 Cargo.lock
 # Temporary linux kernel checkout created by
 # seccompiler/tools/generate_syscall_tables.sh.
