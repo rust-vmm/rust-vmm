@@ -8,6 +8,11 @@
   guest-memory reads, writes, and range checks that fit within a single memory
   region.
 
+### Fixed
+
+- Fix `GuestMemory::read_exact_volatile_from` to retry short reads within each
+  guest memory region.
+
 ## 0.18.0
 
 ### Changed
