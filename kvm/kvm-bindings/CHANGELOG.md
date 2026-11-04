@@ -2,6 +2,11 @@
 
 ## Upcoming Release
 
+### Changed
+
+- [[#198]](https://github.com/rust-vmm/rust-vmm/pull/198) Updated bindings to
+  Linux v7.1-rc6.
+
 ## v0.14.2
 
 ### Added

@@ -43,10 +43,12 @@ pushd linux
 export ARCH=arm64
 make headers_install ARCH=$ARCH INSTALL_HDR_PATH="$ARCH"_headers
 pushd "$ARCH"_headers
+# flexarray.h overrides __DECLARE_FLEX_ARRAY(), whose portable C expansion
+# bindgen turns into a nested struct instead of __IncompleteArrayField.
 bindgen include/linux/kvm.h -o bindings.rs  \
      --impl-debug --with-derive-default --rust-edition 2024  \
      --with-derive-partialeq  --impl-partialeq \
-     -- -Iinclude
+     -- -Iinclude -include ../../kvm-bindings/bindgen/flexarray.h
 popd
 
 # Step 3: Copy the generated file to the arm64 module.
