@@ -779,6 +779,217 @@ mod tests {
 
     use vm_memory::{Address, Bytes, GuestAddress, GuestMemoryMmap};
 
+    fn check_notification<Q: QueueT>(
+        q: &mut Q,
+        mem: &GuestMemoryMmap<()>,
+        used_addr: GuestAddress,
+        avail_addr: GuestAddress,
+    ) {
+        assert!(!q.event_idx_enabled());
+
+        q.enable_notification(mem).unwrap();
+        assert!(!q.event_idx_enabled());
+
+        q.disable_notification(mem).unwrap();
+        assert!(!q.event_idx_enabled());
+
+        q.enable_notification(mem).unwrap();
+
+        let flags = mem.read_obj::<u16>(used_addr).map(u16::from_le).unwrap();
+
+        assert_eq!(flags, 0);
+
+        q.disable_notification(mem).unwrap();
+
+        let flags = mem.read_obj::<u16>(used_addr).map(u16::from_le).unwrap();
+
+        assert_eq!(flags, VRING_USED_F_NO_NOTIFY as u16);
+
+        q.enable_notification(mem).unwrap();
+
+        let flags = mem.read_obj::<u16>(used_addr).map(u16::from_le).unwrap();
+
+        assert_eq!(flags, 0);
+
+        q.set_event_idx(true);
+
+        mem.write_obj::<u16>(u16::to_le(2), avail_addr.unchecked_add(2))
+            .unwrap();
+
+        assert!(q.enable_notification(mem).unwrap());
+
+        q.set_next_avail(2);
+
+        assert!(!q.enable_notification(mem).unwrap());
+
+        mem.write_obj::<u16>(u16::to_le(8), avail_addr.unchecked_add(2))
+            .unwrap();
+
+        assert!(q.enable_notification(mem).unwrap());
+
+        q.set_next_avail(8);
+
+        assert!(!q.enable_notification(mem).unwrap());
+    }
+
+    #[test]
+    fn test_queue_notification() {
+        let mem = GuestMemoryMmap::<()>::from_ranges(&[(GuestAddress(0), 0x10000)]).unwrap();
+
+        let vq = MockSplitQueue::new(&mem, 16);
+        let mut q: Queue = vq.create_queue().unwrap();
+
+        check_notification(&mut q, &mem, vq.used_addr(), vq.avail_addr());
+    }
+
+    #[test]
+    fn test_queue_sync_notification() {
+        let mem = GuestMemoryMmap::<()>::from_ranges(&[(GuestAddress(0), 0x10000)]).unwrap();
+
+        let vq = MockSplitQueue::new(&mem, 256);
+        let mut q: crate::QueueSync = vq.create_queue().unwrap();
+
+        assert!(q.is_valid(&mem));
+
+        check_notification(&mut q, &mem, vq.used_addr(), vq.avail_addr());
+    }
+
+    fn check_add_used<Q: QueueT>(
+        q: &mut Q,
+        mem: &GuestMemoryMmap<()>,
+        vq: &MockSplitQueue<'_, GuestMemoryMmap<()>>,
+    ) {
+        let invalid_index = q.size();
+        let previous_next_used = q.next_used();
+        let previous_used_idx = q.used_idx(mem, Ordering::Acquire).unwrap();
+
+        assert!(q.add_used(mem, invalid_index, 0x1000).is_err());
+
+        assert_eq!(q.next_used(), previous_next_used);
+        assert_eq!(
+            q.used_idx(mem, Ordering::Acquire).unwrap(),
+            previous_used_idx
+        );
+
+        let previous_next_used = q.next_used();
+
+        q.add_used(mem, 1, 0x1000).unwrap();
+
+        assert_eq!(q.next_used(), previous_next_used + 1);
+        assert_eq!(
+            q.used_idx(mem, Ordering::Acquire).unwrap(),
+            Wrapping(previous_next_used + 1)
+        );
+
+        let used_elem = vq
+            .used()
+            .ring()
+            .ref_at(previous_next_used as usize)
+            .unwrap()
+            .load();
+        assert_eq!(used_elem.id(), 1);
+        assert_eq!(used_elem.len(), 0x1000);
+    }
+
+    #[test]
+    fn test_queue_add_used() {
+        let mem = GuestMemoryMmap::<()>::from_ranges(&[(GuestAddress(0), 0x10000)]).unwrap();
+
+        let vq = MockSplitQueue::new(&mem, 16);
+        let mut q: Queue = vq.create_queue().unwrap();
+
+        check_add_used(&mut q, &mem, &vq);
+    }
+
+    #[test]
+    fn test_queue_sync_add_used() {
+        let mem = GuestMemoryMmap::<()>::from_ranges(&[(GuestAddress(0), 0x10000)]).unwrap();
+
+        let vq = MockSplitQueue::new(&mem, 256);
+        let mut q: crate::QueueSync = vq.create_queue().unwrap();
+
+        assert_eq!(q.max_size(), 256);
+        assert_eq!(q.size(), 256);
+
+        q.set_size(128);
+
+        assert_eq!(q.size(), 128);
+        assert_eq!(q.max_size(), 256);
+
+        q.set_next_avail(5);
+        assert_eq!(q.next_avail(), 5);
+
+        assert_eq!(q.avail_idx(&mem, Ordering::Acquire).unwrap(), Wrapping(0));
+        assert_eq!(q.used_idx(&mem, Ordering::Acquire).unwrap(), Wrapping(0));
+
+        q.set_next_used(3);
+        q.set_event_idx(true);
+        assert!(q.is_valid(&mem));
+        check_add_used(&mut q, &mem, &vq);
+    }
+
+    fn check_reset<Q: QueueT>(q: &mut Q, mem: &GuestMemoryMmap<()>) {
+        let max_size = q.max_size();
+
+        q.set_ready(true);
+        q.set_size(8);
+        q.set_next_avail(2);
+        q.set_next_used(4);
+        q.set_event_idx(true);
+        q.set_desc_table_address(Some(0x5000), None);
+        q.set_avail_ring_address(Some(0x6000), None);
+        q.set_used_ring_address(Some(0x7000), None);
+        q.needs_notification(mem).unwrap();
+        q.lock().num_added = Wrapping(15);
+
+        assert!(q.ready());
+        assert_eq!(q.size(), 8);
+        assert_eq!(q.next_avail(), 2);
+        assert_eq!(q.next_used(), 4);
+        assert!(q.event_idx_enabled());
+        assert_eq!(q.desc_table(), 0x5000);
+        assert_eq!(q.avail_ring(), 0x6000);
+        assert_eq!(q.used_ring(), 0x7000);
+        assert_eq!(q.lock().num_added, Wrapping(15));
+
+        q.reset();
+
+        assert!(!q.ready());
+        assert_eq!(q.size(), max_size);
+        assert_eq!(q.max_size(), max_size);
+        assert_eq!(q.next_avail(), 0);
+        assert_eq!(q.next_used(), 0);
+        assert!(!q.event_idx_enabled());
+        assert_eq!(q.desc_table(), DEFAULT_DESC_TABLE_ADDR);
+        assert_eq!(q.avail_ring(), DEFAULT_AVAIL_RING_ADDR);
+        assert_eq!(q.used_ring(), DEFAULT_USED_RING_ADDR);
+        assert_eq!(q.lock().num_added, Wrapping(0));
+    }
+
+    #[test]
+    fn test_generic_queue_reset() {
+        let mem = GuestMemoryMmap::<()>::from_ranges(&[(GuestAddress(0), 0x10000)]).unwrap();
+
+        let vq = MockSplitQueue::new(&mem, 16);
+
+        let mut q: Queue = vq.create_queue().unwrap();
+
+        check_reset(&mut q, &mem);
+    }
+
+    #[test]
+    fn test_generic_queue_sync_reset() {
+        let mem = GuestMemoryMmap::<()>::from_ranges(&[(GuestAddress(0), 0x10000)]).unwrap();
+
+        let vq = MockSplitQueue::new(&mem, 256);
+
+        let mut q: crate::QueueSync = vq.create_queue().unwrap();
+
+        assert!(q.is_valid(&mem));
+
+        check_reset(&mut q, &mem);
+    }
+
     #[test]
     fn test_queue_is_valid() {
         let m = &GuestMemoryMmap::<()>::from_ranges(&[(GuestAddress(0), 0x10000)]).unwrap();
@@ -855,68 +1066,6 @@ mod tests {
         let addr = vq.used_addr().0;
         q.set_used_ring_address(Some(addr as u32), Some((addr >> 32) as u32));
         assert!(q.is_valid(m));
-    }
-
-    #[test]
-    fn test_add_used() {
-        let mem = &GuestMemoryMmap::<()>::from_ranges(&[(GuestAddress(0), 0x10000)]).unwrap();
-        let vq = MockSplitQueue::new(mem, 16);
-        let mut q: Queue = vq.create_queue().unwrap();
-
-        assert_eq!(q.used_idx(mem, Ordering::Acquire).unwrap(), Wrapping(0));
-        assert_eq!(u16::from_le(vq.used().idx().load()), 0);
-
-        // index too large
-        assert!(q.add_used(mem, 16, 0x1000).is_err());
-        assert_eq!(u16::from_le(vq.used().idx().load()), 0);
-
-        // should be ok
-        q.add_used(mem, 1, 0x1000).unwrap();
-        assert_eq!(q.next_used, Wrapping(1));
-        assert_eq!(q.used_idx(mem, Ordering::Acquire).unwrap(), Wrapping(1));
-        assert_eq!(u16::from_le(vq.used().idx().load()), 1);
-
-        let x = vq.used().ring().ref_at(0).unwrap().load();
-        assert_eq!(x.id(), 1);
-        assert_eq!(x.len(), 0x1000);
-    }
-
-    #[test]
-    fn test_reset_queue() {
-        let m = &GuestMemoryMmap::<()>::from_ranges(&[(GuestAddress(0), 0x10000)]).unwrap();
-        let vq = MockSplitQueue::new(m, 16);
-        let mut q: Queue = vq.create_queue().unwrap();
-
-        q.set_size(8);
-        // The address set by `MockSplitQueue` for the descriptor table is DEFAULT_DESC_TABLE_ADDR,
-        // so let's change it for testing the reset.
-        q.set_desc_table_address(Some(0x5000), None);
-        // Same for `event_idx_enabled`, `next_avail` `next_used` and `signalled_used`.
-        q.set_event_idx(true);
-        q.set_next_avail(2);
-        q.set_next_used(4);
-        q.num_added = Wrapping(15);
-        assert_eq!(q.size, 8);
-        // `create_queue` also marks the queue as ready.
-        assert!(q.ready);
-        assert_ne!(q.desc_table, GuestAddress(DEFAULT_DESC_TABLE_ADDR));
-        assert_ne!(q.avail_ring, GuestAddress(DEFAULT_AVAIL_RING_ADDR));
-        assert_ne!(q.used_ring, GuestAddress(DEFAULT_USED_RING_ADDR));
-        assert_ne!(q.next_avail, Wrapping(0));
-        assert_ne!(q.next_used, Wrapping(0));
-        assert_ne!(q.num_added, Wrapping(0));
-        assert!(q.event_idx_enabled);
-
-        q.reset();
-        assert_eq!(q.size, 16);
-        assert!(!q.ready);
-        assert_eq!(q.desc_table, GuestAddress(DEFAULT_DESC_TABLE_ADDR));
-        assert_eq!(q.avail_ring, GuestAddress(DEFAULT_AVAIL_RING_ADDR));
-        assert_eq!(q.used_ring, GuestAddress(DEFAULT_USED_RING_ADDR));
-        assert_eq!(q.next_avail, Wrapping(0));
-        assert_eq!(q.next_used, Wrapping(0));
-        assert_eq!(q.num_added, Wrapping(0));
-        assert!(!q.event_idx_enabled);
     }
 
     #[test]
@@ -997,45 +1146,6 @@ mod tests {
         // (i.e. `next_used` - `num_added`) and the current `next_used`, thus suggesting that we
         // need to notify the driver.
         assert!(q.needs_notification(mem).unwrap());
-    }
-
-    #[test]
-    fn test_enable_disable_notification() {
-        let mem = &GuestMemoryMmap::<()>::from_ranges(&[(GuestAddress(0), 0x10000)]).unwrap();
-        let vq = MockSplitQueue::new(mem, 16);
-
-        let mut q: Queue = vq.create_queue().unwrap();
-        let used_addr = vq.used_addr();
-
-        assert!(!q.event_idx_enabled);
-
-        q.enable_notification(mem).unwrap();
-        let v = mem.read_obj::<u16>(used_addr).map(u16::from_le).unwrap();
-        assert_eq!(v, 0);
-
-        q.disable_notification(mem).unwrap();
-        let v = mem.read_obj::<u16>(used_addr).map(u16::from_le).unwrap();
-        assert_eq!(v, VRING_USED_F_NO_NOTIFY as u16);
-
-        q.enable_notification(mem).unwrap();
-        let v = mem.read_obj::<u16>(used_addr).map(u16::from_le).unwrap();
-        assert_eq!(v, 0);
-
-        q.set_event_idx(true);
-        let avail_addr = vq.avail_addr();
-        mem.write_obj::<u16>(u16::to_le(2), avail_addr.unchecked_add(2))
-            .unwrap();
-
-        assert!(q.enable_notification(mem).unwrap());
-        q.next_avail = Wrapping(2);
-        assert!(!q.enable_notification(mem).unwrap());
-
-        mem.write_obj::<u16>(u16::to_le(8), avail_addr.unchecked_add(2))
-            .unwrap();
-
-        assert!(q.enable_notification(mem).unwrap());
-        q.next_avail = Wrapping(8);
-        assert!(!q.enable_notification(mem).unwrap());
     }
 
     #[test]
