@@ -1,0 +1,18 @@
+version: 2
+updates:
+- package-ecosystem: cargo
+  directory: "/"
+  schedule:
+    interval: weekly
+  allow:
+  - dependency-type: direct
+  - dependency-type: indirect
+  groups:
+      vhost:
+        patterns:
+          - "*"
+- package-ecosystem: gitsubmodule
+  directory: "/"
+  schedule:
+    interval: weekly
+  open-pull-requests-limit: 10

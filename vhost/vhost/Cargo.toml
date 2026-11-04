@@ -1,0 +1,54 @@
+[package]
+name = "vhost"
+version = "0.18.0"
+keywords = ["vhost", "vhost-user", "virtio", "vdpa"]
+description = "a pure rust library for vdpa, vhost and vhost-user"
+authors = ["Liu Jiang <gerry@linux.alibaba.com>"]
+repository.workspace = true
+documentation = "https://docs.rs/vhost"
+readme = "README.md"
+license = "Apache-2.0 OR BSD-3-Clause"
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustc-args = ["--cfg", "RUSTDOC_disable_feature_compat_errors"]
+
+[features]
+default = []
+test-utils = []
+vhost-vsock = []
+vhost-kern = []
+vhost-vdpa = ["vhost-kern"]
+vhost-net = ["vhost-kern"]
+vhost-user = []
+vhost-user-frontend = ["vhost-user"]
+vhost-user-backend = ["vhost-user"]
+xen = ["vm-memory/xen"]
+postcopy = ["postcopy-frontend"]
+postcopy-frontend = []
+
+[dependencies]
+bitflags = "2.4"
+libc = "0.2.39"
+uuid = { version = "1.11.0", default-features = false, features=["v4", "fast-rng"] }
+
+vmm-sys-util = { workspace = true }
+vm-memory = { workspace = true, features=["backend-mmap"] }
+
+[dev-dependencies]
+tempfile = "3.2.0"
+serial_test = "4.0"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(RUSTDOC_disable_feature_compat_errors)'] }
+
+[package.metadata.cargo-all-features]
+skip_feature_sets = [
+    ["xen", "postcopy"],
+    ["xen", "postcopy-frontend"],
+    # postcopy implies postcopy-frontend, so skip the combination to speed up CI
+    ["postcopy", "postcopy-frontend"],
+]
+
+denylist = ["test-utils"]

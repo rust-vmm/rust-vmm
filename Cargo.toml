@@ -9,6 +9,8 @@ members = [
   "kvm/kvm-ioctls",
   "linux-loader",
   "seccompiler",
+  "vhost/vhost",
+  "vhost/vhost-user-backend",
   "vm-allocator",
   "vm-device",
   "vm-memory",
