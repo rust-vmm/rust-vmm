@@ -40,7 +40,7 @@ use crate::bitmap::{Bitmap, BitmapSlice, BS};
 use crate::{AtomicAccess, ByteValued, Bytes};
 
 #[cfg(all(feature = "backend-mmap", feature = "xen", target_family = "unix"))]
-use crate::mmap::xen::{MmapXen as MmapInfo, MmapXenSlice};
+use crate::mmap::xen::{Error as MmapXenError, MmapXen as MmapInfo, MmapXenSlice};
 
 #[cfg(not(feature = "xen"))]
 type MmapInfo = std::marker::PhantomData<()>;
@@ -74,6 +74,16 @@ pub enum Error {
 
 /// Result of volatile memory operations.
 pub type Result<T> = result::Result<T, Error>;
+
+#[cfg(all(feature = "backend-mmap", feature = "xen", target_family = "unix"))]
+impl From<MmapXenError> for Error {
+    fn from(err: MmapXenError) -> Self {
+        match err {
+            MmapXenError::Mmap(e) => Error::IOError(e),
+            other => Error::IOError(io::Error::other(other)),
+        }
+    }
+}
 
 /// Convenience function for computing `base + offset`.
 ///
@@ -339,7 +349,7 @@ pub struct PtrGuard {
 #[allow(clippy::len_without_is_empty)]
 impl PtrGuard {
     #[allow(unused_variables)]
-    fn new(mmap: Option<&MmapInfo>, addr: *mut u8, write: bool, len: usize) -> Self {
+    fn new(mmap: Option<&MmapInfo>, addr: *mut u8, write: bool, len: usize) -> Result<Self> {
         #[cfg(all(feature = "xen", target_family = "unix"))]
         let (addr, _slice) = {
             let prot = if write {
@@ -347,20 +357,20 @@ impl PtrGuard {
             } else {
                 libc::PROT_READ
             };
-            let slice = MmapInfo::mmap(mmap, addr, prot, len);
+            let slice = MmapInfo::mmap(mmap, addr, prot, len)?;
             (slice.addr(), slice)
         };
 
-        Self {
+        Ok(Self {
             addr,
             len,
 
             #[cfg(all(feature = "xen", target_family = "unix"))]
             _slice,
-        }
+        })
     }
 
-    fn read(mmap: Option<&MmapInfo>, addr: *mut u8, len: usize) -> Self {
+    fn read(mmap: Option<&MmapInfo>, addr: *mut u8, len: usize) -> Result<Self> {
         Self::new(mmap, addr, false, len)
     }
 
@@ -381,8 +391,8 @@ pub struct PtrGuardMut(PtrGuard);
 
 #[allow(clippy::len_without_is_empty)]
 impl PtrGuardMut {
-    fn write(mmap: Option<&MmapInfo>, addr: *mut u8, len: usize) -> Self {
-        Self(PtrGuard::new(mmap, addr, true, len))
+    fn write(mmap: Option<&MmapInfo>, addr: *mut u8, len: usize) -> Result<Self> {
+        PtrGuard::new(mmap, addr, true, len).map(Self)
     }
 
     /// Returns a mutable pointer to the beginning of the slice. Mutable accesses performed
@@ -457,12 +467,12 @@ impl<'a, B: BitmapSlice> VolatileSlice<'a, B> {
     }
 
     /// Returns a guard for the pointer to the underlying memory.
-    pub fn ptr_guard(&self) -> PtrGuard {
+    pub fn ptr_guard(&self) -> Result<PtrGuard> {
         PtrGuard::read(self.mmap, self.addr, self.len())
     }
 
     /// Returns a mutable guard for the pointer to the underlying memory.
-    pub fn ptr_guard_mut(&self) -> PtrGuardMut {
+    pub fn ptr_guard_mut(&self) -> Result<PtrGuardMut> {
         PtrGuardMut::write(self.mmap, self.addr, self.len())
     }
 
@@ -569,14 +579,14 @@ impl<'a, B: BitmapSlice> VolatileSlice<'a, B> {
     /// let mut mem = [0u8; 32];
     /// let vslice = VolatileSlice::from(&mut mem[..]);
     /// let mut buf = [5u8; 16];
-    /// let res = vslice.copy_to(&mut buf[..]);
+    /// let res = vslice.copy_to(&mut buf[..]).unwrap();
     ///
     /// assert_eq!(16, res);
     /// for &v in &buf[..] {
     ///     assert_eq!(v, 0);
     /// }
     /// ```
-    pub fn copy_to<T>(&self, buf: &mut [T]) -> usize
+    pub fn copy_to<T>(&self, buf: &mut [T]) -> Result<usize>
     where
         T: ByteValued,
     {
@@ -645,17 +655,18 @@ impl<'a, B: BitmapSlice> VolatileSlice<'a, B> {
     /// let vslice = VolatileSlice::from(&mut mem[..]);
     ///
     /// let buf = [5u8; 64];
-    /// vslice.copy_from(&buf[..]);
+    /// vslice.copy_from(&buf[..]).unwrap();
     ///
     /// for i in 0..4 {
     ///     let val = vslice
     ///         .get_ref::<u32>(i * 4)
     ///         .expect("Could not get value")
-    ///         .load();
+    ///         .load()
+    ///         .expect("Could not load value");
     ///     assert_eq!(val, 0x05050505);
     /// }
     /// ```
-    pub fn copy_from<T>(&self, buf: &[T])
+    pub fn copy_from<T>(&self, buf: &[T]) -> Result<()>
     where
         T: ByteValued,
     {
@@ -669,7 +680,7 @@ impl<'a, B: BitmapSlice> VolatileSlice<'a, B> {
             //   a slice and thus has to live outside of guest memory (there can be more slices to
             //   guest memory without violating rust's aliasing rules)
             // - size is always a multiple of alignment, so treating *mut T as *mut u8 is fine
-            unsafe { copy_to_volatile_slice(self, buf.as_ptr() as *const u8, total) };
+            unsafe { copy_to_volatile_slice(self, buf.as_ptr() as *const u8, total)? };
         } else {
             let count = self.size / size_of::<T>();
             // It's ok to use unwrap here because `count` was computed based on the current
@@ -678,8 +689,9 @@ impl<'a, B: BitmapSlice> VolatileSlice<'a, B> {
 
             // No need to explicitly call `mark_dirty` after this call because
             // `VolatileArrayRef::copy_from` already takes care of that.
-            dest.copy_from(buf);
+            dest.copy_from(buf)?;
         };
+        Ok(())
     }
 
     /// Checks if the current slice is aligned at `alignment` bytes.
@@ -884,8 +896,8 @@ impl<B: BitmapSlice> VolatileMemory for VolatileSlice<'_, B> {
 /// let v_ref = unsafe { VolatileRef::new(&mut v as *mut u32 as *mut u8) };
 ///
 /// assert_eq!(v, 5);
-/// assert_eq!(v_ref.load(), 5);
-/// v_ref.store(500);
+/// assert_eq!(v_ref.load().unwrap(), 5);
+/// v_ref.store(500).unwrap();
 /// assert_eq!(v, 500);
 /// ```
 #[derive(Clone, Copy, Debug)]
@@ -936,12 +948,12 @@ where
     }
 
     /// Returns a guard for the pointer to the underlying memory.
-    pub fn ptr_guard(&self) -> PtrGuard {
+    pub fn ptr_guard(&self) -> Result<PtrGuard> {
         PtrGuard::read(self.mmap, self.addr as *mut u8, self.len())
     }
 
     /// Returns a mutable guard for the pointer to the underlying memory.
-    pub fn ptr_guard_mut(&self) -> PtrGuardMut {
+    pub fn ptr_guard_mut(&self) -> Result<PtrGuardMut> {
         PtrGuardMut::write(self.mmap, self.addr as *mut u8, self.len())
     }
 
@@ -967,24 +979,25 @@ where
 
     /// Does a volatile write of the value `v` to the address of this ref.
     #[inline(always)]
-    pub fn store(&self, v: T) {
-        let guard = self.ptr_guard_mut();
+    pub fn store(&self, v: T) -> Result<()> {
+        let guard = self.ptr_guard_mut()?;
 
         // SAFETY: Safe because we checked the address and size when creating this VolatileRef.
         unsafe { write_volatile(guard.as_ptr() as *mut Packed<T>, Packed::<T>(v)) };
-        self.bitmap.mark_dirty(0, self.len())
+        self.bitmap.mark_dirty(0, self.len());
+        Ok(())
     }
 
     /// Does a volatile read of the value at the address of this ref.
     #[inline(always)]
-    pub fn load(&self) -> T {
-        let guard = self.ptr_guard();
+    pub fn load(&self) -> Result<T> {
+        let guard = self.ptr_guard()?;
 
         // SAFETY: Safe because we checked the address and size when creating this VolatileRef.
         // For the purposes of demonstrating why read_volatile is necessary, try replacing the code
         // in this function with the commented code below and running `cargo test --release`.
         // unsafe { *(self.addr as *const T) }
-        unsafe { read_volatile(guard.as_ptr() as *const Packed<T>).0 }
+        Ok(unsafe { read_volatile(guard.as_ptr() as *const Packed<T>).0 })
     }
 
     /// Converts this to a [`VolatileSlice`](struct.VolatileSlice.html) with the same size and
@@ -1013,8 +1026,8 @@ where
 /// let v_ref = unsafe { VolatileArrayRef::new(&mut v[0] as *mut u32 as *mut u8, v.len()) };
 ///
 /// assert_eq!(v[0], 5);
-/// assert_eq!(v_ref.load(0), 5);
-/// v_ref.store(0, 500);
+/// assert_eq!(v_ref.load(0).unwrap(), 5);
+/// v_ref.store(0, 500).unwrap();
 /// assert_eq!(v[0], 500);
 /// ```
 #[derive(Clone, Copy, Debug)]
@@ -1117,12 +1130,12 @@ where
     }
 
     /// Returns a guard for the pointer to the underlying memory.
-    pub fn ptr_guard(&self) -> PtrGuard {
+    pub fn ptr_guard(&self) -> Result<PtrGuard> {
         PtrGuard::read(self.mmap, self.addr, self.len())
     }
 
     /// Returns a mutable guard for the pointer to the underlying memory.
-    pub fn ptr_guard_mut(&self) -> PtrGuardMut {
+    pub fn ptr_guard_mut(&self) -> Result<PtrGuardMut> {
         PtrGuardMut::write(self.mmap, self.addr, self.len())
     }
 
@@ -1162,12 +1175,12 @@ where
     }
 
     /// Does a volatile read of the element at `index`.
-    pub fn load(&self, index: usize) -> T {
+    pub fn load(&self, index: usize) -> Result<T> {
         self.ref_at(index).load()
     }
 
     /// Does a volatile write of the element at `index`.
-    pub fn store(&self, index: usize, value: T) {
+    pub fn store(&self, index: usize, value: T) -> Result<()> {
         // The `VolatileRef::store` call below implements the required dirty bitmap tracking logic,
         // so no need to do that in this method as well.
         self.ref_at(index).store(value)
@@ -1188,12 +1201,12 @@ where
     /// let v_ref = unsafe { VolatileArrayRef::new(v.as_mut_ptr(), v.len()) };
     ///
     /// let mut buf = [5u8; 16];
-    /// v_ref.copy_to(&mut buf[..]);
+    /// v_ref.copy_to(&mut buf[..]).unwrap();
     /// for &v in &buf[..] {
     ///     assert_eq!(v, 0);
     /// }
     /// ```
-    pub fn copy_to(&self, buf: &mut [T]) -> usize {
+    pub fn copy_to(&self, buf: &mut [T]) -> Result<usize> {
         // A fast path for u8/i8
         if size_of::<T>() == 1 {
             let source = self.to_slice();
@@ -1207,11 +1220,15 @@ where
             //   guest memory without violating rust's aliasing rules)
             // - size is always a multiple of alignment, so treating *mut T as *mut u8 is fine
             return unsafe {
-                copy_from_volatile_slice(buf.as_mut_ptr() as *mut u8, &source, total)
+                Ok(copy_from_volatile_slice(
+                    buf.as_mut_ptr() as *mut u8,
+                    &source,
+                    total,
+                )?)
             };
         }
 
-        let guard = self.ptr_guard();
+        let guard = self.ptr_guard()?;
         let mut ptr = guard.as_ptr() as *const Packed<T>;
         let start = ptr;
 
@@ -1227,7 +1244,7 @@ where
         }
 
         // SAFETY: It is guaranteed that start and ptr point to the regions of the same slice.
-        unsafe { ptr.offset_from(start) as usize }
+        Ok(unsafe { ptr.offset_from(start) as usize })
     }
 
     /// Copies as many bytes as possible from this slice to the provided `slice`.
@@ -1276,12 +1293,12 @@ where
     /// let v_ref = unsafe { VolatileArrayRef::<u8>::new(v.as_mut_ptr(), v.len()) };
     ///
     /// let buf = [5u8; 64];
-    /// v_ref.copy_from(&buf[..]);
+    /// v_ref.copy_from(&buf[..]).unwrap();
     /// for &val in &v[..] {
     ///     assert_eq!(5u8, val);
     /// }
     /// ```
-    pub fn copy_from(&self, buf: &[T]) {
+    pub fn copy_from(&self, buf: &[T]) -> Result<()> {
         // A fast path for u8/i8
         if size_of::<T>() == 1 {
             let destination = self.to_slice();
@@ -1295,9 +1312,9 @@ where
             //   a slice and thus has to live outside of guest memory (there can be more slices to
             //   guest memory without violating rust's aliasing rules)
             // - size is always a multiple of alignment, so treating *const T as *const u8 is fine
-            unsafe { copy_to_volatile_slice(&destination, buf.as_ptr() as *const u8, total) };
+            unsafe { copy_to_volatile_slice(&destination, buf.as_ptr() as *const u8, total)? };
         } else {
-            let guard = self.ptr_guard_mut();
+            let guard = self.ptr_guard_mut()?;
             let start = guard.as_ptr();
             let mut ptr = start as *mut Packed<T>;
 
@@ -1314,6 +1331,7 @@ where
 
             self.bitmap.mark_dirty(0, ptr as usize - start as usize);
         }
+        Ok(())
     }
 }
 
@@ -1434,11 +1452,11 @@ pub(crate) mod copy_slice_impl {
         dst: *mut u8,
         slice: &VolatileSlice<'_, B>,
         total: usize,
-    ) -> usize {
-        let guard = slice.ptr_guard();
+    ) -> Result<usize> {
+        let guard = slice.ptr_guard()?;
 
         // SAFETY: guaranteed by function invariants.
-        copy_slice(dst, guard.as_ptr(), total)
+        Ok(copy_slice(dst, guard.as_ptr(), total))
     }
 
     /// Copies `total` bytes from 'src' to `slice`
@@ -1449,13 +1467,13 @@ pub(crate) mod copy_slice_impl {
         slice: &VolatileSlice<'_, B>,
         src: *const u8,
         total: usize,
-    ) -> usize {
-        let guard = slice.ptr_guard_mut();
+    ) -> Result<usize> {
+        let guard = slice.ptr_guard_mut()?;
 
         // SAFETY: guaranteed by function invariants.
         let count = copy_slice(guard.as_ptr(), src, total);
         slice.bitmap.mark_dirty(0, count);
-        count
+        Ok(count)
     }
 }
 
@@ -1581,7 +1599,7 @@ mod tests {
         {
             let a_ref = VolatileSlice::from(&mut a[..]);
             let v_ref = a_ref.get_ref(0).unwrap();
-            v_ref.store(2u8);
+            v_ref.store(2u8).unwrap();
         }
         assert_eq!(a[0], 2);
     }
@@ -1593,11 +1611,11 @@ mod tests {
             let a_ref = VolatileSlice::from(&mut a[..]);
             let c = {
                 let v_ref = a_ref.get_ref::<u8>(0).unwrap();
-                assert_eq!(v_ref.load(), 5u8);
+                assert_eq!(v_ref.load().unwrap(), 5u8);
                 v_ref
             };
             // To make sure we can take a v_ref out of the scope we made it in:
-            c.load();
+            c.load().unwrap();
             // but not too far:
             // c
         } //.load()
@@ -1609,7 +1627,7 @@ mod tests {
         let mut a = [1u8; 5];
         let a_ref = VolatileSlice::from(&mut a[..]);
         let v_ref = a_ref.get_ref(1).unwrap();
-        v_ref.store(0x1234_5678u32);
+        v_ref.store(0x1234_5678u32).unwrap();
         let ref_slice = v_ref.to_slice();
         assert_eq!(v_ref.addr as usize, ref_slice.addr as usize);
         assert_eq!(v_ref.len(), ref_slice.len());
@@ -1635,19 +1653,19 @@ mod tests {
         let barrier = Arc::new(Barrier::new(2));
         let barrier1 = barrier.clone();
 
-        v_ref.store(99);
+        v_ref.store(99).unwrap();
         spawn(move || {
             barrier1.wait();
             let inside_slice = unsafe { VolatileSlice::new(inside_arc.0, 1) };
             let clone_v_ref = inside_slice.get_ref::<u8>(0).unwrap();
-            clone_v_ref.store(0);
+            clone_v_ref.store(0).unwrap();
             barrier1.wait();
         });
 
-        assert_eq!(v_ref.load(), 99);
+        assert_eq!(v_ref.load().unwrap(), 99);
         barrier.wait();
         barrier.wait();
-        assert_eq!(v_ref.load(), 0);
+        assert_eq!(v_ref.load().unwrap(), 0);
 
         unsafe { std::alloc::dealloc(mem.0, Layout::from_size_align(1, 1).unwrap()) }
     }
@@ -1768,8 +1786,8 @@ mod tests {
         let mut c = [0u8; 6];
         let a_ref = VolatileSlice::from(&mut a[..]);
         let v_ref = a_ref.get_slice(0, a_ref.len()).unwrap();
-        v_ref.copy_to(&mut b[..]);
-        v_ref.copy_to(&mut c[..]);
+        v_ref.copy_to(&mut b[..]).unwrap();
+        v_ref.copy_to(&mut c[..]).unwrap();
         assert_eq!(b[0..4], a[0..4]);
         assert_eq!(c[0..5], a[0..5]);
     }
@@ -1782,8 +1800,8 @@ mod tests {
         let a_ref = &mut a[..];
         let v_ref = unsafe { VolatileSlice::new(a_ref.as_mut_ptr() as *mut u8, 9) };
 
-        v_ref.copy_to(&mut b[..]);
-        v_ref.copy_to(&mut c[..]);
+        v_ref.copy_to(&mut b[..]).unwrap();
+        v_ref.copy_to(&mut c[..]).unwrap();
         assert_eq!(b[0..4], a_ref[0..4]);
         assert_eq!(c[0..4], a_ref[0..4]);
         assert_eq!(c[4], 0);
@@ -1796,12 +1814,12 @@ mod tests {
         let mut c = [0u8; 6];
         let b_ref = VolatileSlice::from(&mut b[..]);
         let v_ref = b_ref.get_slice(0, b_ref.len()).unwrap();
-        v_ref.copy_from(&a[..]);
+        v_ref.copy_from(&a[..]).unwrap();
         assert_eq!(b[0..4], a[0..4]);
 
         let c_ref = VolatileSlice::from(&mut c[..]);
         let v_ref = c_ref.get_slice(0, c_ref.len()).unwrap();
-        v_ref.copy_from(&a[..]);
+        v_ref.copy_from(&a[..]).unwrap();
         assert_eq!(c[0..5], a[0..5]);
     }
 
@@ -1812,12 +1830,12 @@ mod tests {
         let mut c = [0u16; 6];
         let b_ref = &mut b[..];
         let v_ref = unsafe { VolatileSlice::new(b_ref.as_mut_ptr() as *mut u8, 8) };
-        v_ref.copy_from(&a[..]);
+        v_ref.copy_from(&a[..]).unwrap();
         assert_eq!(b_ref[0..4], a[0..4]);
 
         let c_ref = &mut c[..];
         let v_ref = unsafe { VolatileSlice::new(c_ref.as_mut_ptr() as *mut u8, 9) };
-        v_ref.copy_from(&a[..]);
+        v_ref.copy_from(&a[..]).unwrap();
         assert_eq!(c_ref[0..4], a[0..4]);
         assert_eq!(c_ref[4], 0);
     }
@@ -1896,7 +1914,7 @@ mod tests {
         let a = VolatileSlice::from(backing.as_mut_slice());
         let s = a.as_volatile_slice();
         let r = a.get_ref(2).unwrap();
-        r.store(9u16);
+        r.store(9u16).unwrap();
         assert_eq!(s.read_obj::<u16>(2).unwrap(), 9);
     }
 
@@ -2019,9 +2037,9 @@ mod tests {
         let sample_buf: [u8; 7] = [1, 2, 0xAA, 0xAA, 0xAA, 0xAA, 4];
         s.write_slice(&sample_buf, 0).unwrap();
         let r = a.get_ref::<u32>(2).unwrap();
-        assert_eq!(r.load(), 0xAAAA_AAAA);
+        assert_eq!(r.load().unwrap(), 0xAAAA_AAAA);
 
-        r.store(0x5555_5555);
+        r.store(0x5555_5555).unwrap();
         let sample_buf: [u8; 7] = [1, 2, 0x55, 0x55, 0x55, 0x55, 4];
         let mut buf: [u8; 7] = Default::default();
         s.read_slice(&mut buf, 0).unwrap();
@@ -2059,7 +2077,7 @@ mod tests {
         let a_slice = a_ref.get_slice(0, a_ref.len()).unwrap();
         let a_array_ref: VolatileArrayRef<u8, ()> = a_slice.into();
         for (i, entry) in a_vec.iter().enumerate() {
-            assert_eq!(&a_array_ref.load(i), entry);
+            assert_eq!(&a_array_ref.load(i).unwrap(), entry);
         }
     }
 
@@ -2069,9 +2087,9 @@ mod tests {
         {
             let a_ref = VolatileSlice::from(&mut a[..]);
             let v_ref = a_ref.get_array_ref(1, 4).unwrap();
-            v_ref.store(1, 2u8);
-            v_ref.store(2, 4u8);
-            v_ref.store(3, 6u8);
+            v_ref.store(1, 2u8).unwrap();
+            v_ref.store(2, 4u8).unwrap();
+            v_ref.store(3, 6u8).unwrap();
         }
         let expected = [2u8, 4u8, 6u8];
         assert_eq!(a[2..=4], expected);
@@ -2084,13 +2102,13 @@ mod tests {
             let a_ref = VolatileSlice::from(&mut a[..]);
             let c = {
                 let v_ref = a_ref.get_array_ref::<u8>(1, 4).unwrap();
-                assert_eq!(v_ref.load(1), 2u8);
-                assert_eq!(v_ref.load(2), 3u8);
-                assert_eq!(v_ref.load(3), 10u8);
+                assert_eq!(v_ref.load(1).unwrap(), 2u8);
+                assert_eq!(v_ref.load(2).unwrap(), 3u8);
+                assert_eq!(v_ref.load(3).unwrap(), 10u8);
                 v_ref
             };
             // To make sure we can take a v_ref out of the scope we made it in:
-            c.load(0);
+            c.load(0).unwrap();
             // but not too far:
             // c
         } //.load()
@@ -2227,7 +2245,7 @@ mod tests {
             let buf = vec![1u8; dirty_offset];
 
             assert!(range_is_clean(slice.bitmap(), 0, dirty_offset));
-            slice.copy_from(&buf);
+            slice.copy_from(&buf).unwrap();
             assert!(range_is_dirty(slice.bitmap(), 0, dirty_offset));
         }
 
@@ -2237,7 +2255,7 @@ mod tests {
             let buf = vec![val; dirty_offset / size_of_val(&val)];
 
             assert!(range_is_clean(slice3.bitmap(), 0, dirty_offset));
-            slice3.copy_from(&buf);
+            slice3.copy_from(&buf).unwrap();
             assert!(range_is_dirty(slice3.bitmap(), 0, dirty_offset));
         }
 
@@ -2258,7 +2276,7 @@ mod tests {
         };
 
         assert!(range_is_clean(vref.bitmap(), 0, vref.len()));
-        vref.store(val);
+        vref.store(val).unwrap();
         assert!(range_is_dirty(vref.bitmap(), 0, vref.len()));
     }
 
@@ -2284,7 +2302,7 @@ mod tests {
         let copy_buf = vec![val; index + 1];
 
         assert!(range_is_clean(arr.bitmap(), 0, arr.len() * size_of::<T>()));
-        arr.copy_from(copy_buf.as_slice());
+        arr.copy_from(copy_buf.as_slice()).unwrap();
         assert!(range_is_dirty(arr.bitmap(), 0, size_of_val(buf)));
     }
 
@@ -2312,7 +2330,7 @@ mod tests {
             };
 
             assert!(range_is_clean(arr.bitmap(), 0, arr.len() * dirty_len));
-            arr.ref_at(index).store(val);
+            arr.ref_at(index).store(val).unwrap();
             assert!(range_is_dirty(arr.bitmap(), dirty_offset, dirty_len));
         }
 
@@ -2330,7 +2348,7 @@ mod tests {
 
             let slice = arr.to_slice();
             assert!(range_is_clean(slice.bitmap(), 0, slice.len()));
-            arr.store(index, val);
+            arr.store(index, val).unwrap();
             assert!(range_is_dirty(slice.bitmap(), dirty_offset, dirty_len));
         }
 

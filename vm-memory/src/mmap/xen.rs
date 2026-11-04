@@ -804,7 +804,11 @@ impl MmapXenGrant {
         let mut grant = Self {
             guest_base: range.addr,
             unix_mmap: None,
-            file_offset: range.file_offset.as_ref().unwrap().clone(),
+            file_offset: range
+                .file_offset
+                .as_ref()
+                .ok_or(Error::InvalidFileOffset)?
+                .clone(),
             flags: range.flags.ok_or(Error::UnexpectedError)?,
             size: 0,
             index: 0,
@@ -841,7 +845,9 @@ impl MmapXenGrant {
 
         // Unmap the address first.
         drop(unix_mmap);
-        self.unmap_ioctl(count as u32, index).unwrap();
+
+        // Drop cannot propagate an error, so do not panic if unmapping fails.
+        let _ = self.unmap_ioctl(count as u32, index);
     }
 
     fn mmap_ioctl(&self, addr: GuestAddress, count: usize) -> Result<u64> {
@@ -947,10 +953,9 @@ impl Drop for MmapXenSlice {
     fn drop(&mut self) {
         // Unmaps memory automatically once this instance goes out of scope.
         if let Some(unix_mmap) = self.unix_mmap.take() {
-            self.grant
-                .as_ref()
-                .unwrap()
-                .unmap_range(unix_mmap, self.size, self.index);
+            if let Some(grant) = self.grant.as_ref() {
+                grant.unmap_range(unix_mmap, self.size, self.index);
+            }
         }
     }
 }
@@ -1007,10 +1012,10 @@ impl MmapXen {
         addr: *mut u8,
         prot: i32,
         len: usize,
-    ) -> MmapXenSlice {
+    ) -> Result<MmapXenSlice> {
         match mmap_xen {
-            Some(mmap_xen) => mmap_xen.mmap.mmap_slice(addr, prot, len).unwrap(),
-            None => MmapXenSlice::raw(addr),
+            Some(mmap_xen) => mmap_xen.mmap.mmap_slice(addr, prot, len),
+            None => Ok(MmapXenSlice::raw(addr)),
         }
     }
 }

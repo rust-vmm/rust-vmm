@@ -263,7 +263,7 @@ mod tests {
         let m = GuestRegionMmap::from_range(GuestAddress(0), 5, None).unwrap();
         let s = m.get_slice(MemoryRegionAddress(2), 3).unwrap();
         let guard = s.ptr_guard();
-        assert_eq!(guard.as_ptr(), unsafe { m.as_ptr().offset(2) });
+        assert_eq!(guard.unwrap().as_ptr(), unsafe { m.as_ptr().offset(2) });
     }
 
     #[test]
@@ -634,8 +634,8 @@ mod tests {
         // Test slice data.
         let v = 0x1234_5678u32;
         let r = slice.get_ref::<u32>(0x200).unwrap();
-        r.store(v);
-        assert_eq!(r.load(), v);
+        r.store(v).unwrap();
+        assert_eq!(r.load().unwrap(), v);
     }
 
     #[test]
