@@ -615,9 +615,11 @@ where
 }
 
 /// Generate `FamStruct` implementation for structs with flexible array member.
+///
+/// Accepts a direct field name or a dotted path to a nested flexible array.
 #[macro_export]
 macro_rules! generate_fam_struct_impl {
-    ($struct_type: ty, $entry_type: ty, $entries_name: ident,
+    ($struct_type: ty, $entry_type: ty, $($entries_name: ident).+,
      $field_type: ty, $field_name: ident, $max: expr) => {
         unsafe impl FamStruct for $struct_type {
             type Entry = $entry_type;
@@ -636,12 +638,12 @@ macro_rules! generate_fam_struct_impl {
 
             fn as_slice(&self) -> &[<Self as FamStruct>::Entry] {
                 let len = self.len();
-                unsafe { self.$entries_name.as_slice(len) }
+                unsafe { self.$($entries_name).+.as_slice(len) }
             }
 
             fn as_mut_slice(&mut self) -> &mut [<Self as FamStruct>::Entry] {
                 let len = self.len();
-                unsafe { self.$entries_name.as_mut_slice(len) }
+                unsafe { self.$($entries_name).+.as_mut_slice(len) }
             }
         }
     };
@@ -713,6 +715,28 @@ mod tests {
     }
 
     generate_fam_struct_impl!(MockFamStruct, u32, entries, u32, len, 100);
+
+    #[repr(C)]
+    #[derive(Default, PartialEq)]
+    struct NestedEntries {
+        entries: __IncompleteArrayField<u32>,
+    }
+
+    #[repr(C)]
+    #[derive(Default, PartialEq)]
+    struct NestedFamStruct {
+        len: u32,
+        nested: NestedEntries,
+    }
+
+    generate_fam_struct_impl!(NestedFamStruct, u32, nested.entries, u32, len, 100);
+
+    #[test]
+    fn test_nested_fam_field() {
+        let mut wrapper = FamStructWrapper::<NestedFamStruct>::new(2).unwrap();
+        wrapper.as_mut_slice().copy_from_slice(&[12, 34]);
+        assert_eq!(wrapper.as_slice(), &[12, 34]);
+    }
 
     type MockFamStructWrapper = FamStructWrapper<MockFamStruct>;
 
