@@ -2135,6 +2135,43 @@ impl VmFd {
     }
 }
 
+/// Sets guest_memfd memory attributes for a range of offsets in a guest memory file.
+///
+/// Requires the creating VM to support KVM_CAP_GUEST_MEMFD_MEMORY_ATTRIBUTES.
+///
+/// See the [KVM API documentation] for `KVM_SET_MEMORY_ATTRIBUTES2`.
+///
+/// [KVM API documentation]: <https://docs.kernel.org/next/virt/kvm/api.html#kvm-set-memory-attributes2>
+///
+/// # Arguments
+///
+/// * `file` - A guest memory file.
+/// * `offset` - The host page aligned offset within the file.
+/// * `size` - The length of the range.
+/// * `attributes` - 0 for shared memory or `KVM_MEMORY_ATTRIBUTE_PRIVATE`
+///   for private memory.
+pub fn set_guest_memfd_memory_attributes(
+    file: &File,
+    offset: u64,
+    size: u64,
+    attributes: u64,
+) -> Result<()> {
+    let mut request = kvm_memory_attributes2 {
+        __bindgen_anon_1: kvm_memory_attributes2__bindgen_ty_1 { offset },
+        size,
+        attributes,
+        ..Default::default()
+    };
+    // SAFETY: Here we trust the kernel not to read or write past the end of the
+    // kvm_memory_attributes2 struct.
+    let ret = unsafe { ioctl_with_mut_ref(file, KVM_SET_MEMORY_ATTRIBUTES2(), &mut request) };
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(errno::Error::last())
+    }
+}
+
 /// Helper function to create a new `VmFd`.
 ///
 /// This should not be exported as a public function because the preferred way is to use
