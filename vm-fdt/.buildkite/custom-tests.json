@@ -1,0 +1,11 @@
+{
+  "tests": [
+    {
+      "test_name": "build-no-std",
+      "command": "cd {crate_path} && RUSTFLAGS=\"-D warnings\" cargo build --release --target {target_platform}-unknown-none --no-default-features",
+      "platform": ["x86_64", "aarch64"],
+      "if_changed": "vm-fdt/*",
+      "crate_path": "vm-fdt"
+    }
+  ]
+}
