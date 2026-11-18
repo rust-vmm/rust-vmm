@@ -2,8 +2,16 @@
 
 ## Upcoming Release
 
+### Added
+
+- \[[#208](https://github.com/rust-vmm/rust-vmm/pull/208)\] Add the Windows-only
+  `MmapRegion::from_mapping_handle` constructor for owned
+  read/write views of existing file-mapping objects through borrowed handles.
+
 ### Fixed
 
+- \[[#208](https://github.com/rust-vmm/rust-vmm/pull/208)\] Release Windows
+  allocations if bitmap initialization unwinds.
 - \[[#207](https://github.com/rust-vmm/rust-vmm/pull/207)\] Correct Windows file
   mapping extents at nonzero offsets, reject zero-length file mappings, and
   release file views with `UnmapViewOfFile`.

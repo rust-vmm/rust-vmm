@@ -5,7 +5,9 @@
 
 use std;
 use std::io;
-use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle, RawHandle};
+use std::os::windows::io::{
+    AsHandle, AsRawHandle, BorrowedHandle, FromRawHandle, OwnedHandle, RawHandle,
+};
 use std::ptr::{null, null_mut};
 
 use libc::{c_void, size_t};
@@ -52,14 +54,14 @@ const MM_HIGHEST_VAD_ADDRESS: u64 = 0x000007FFFFFDFFFF;
 
 const MEM_COMMIT: u32 = 0x00001000;
 const MEM_RELEASE: u32 = 0x00008000;
-const FILE_MAP_ALL_ACCESS: u32 = 0xf001f;
+const FILE_MAP_WRITE: u32 = 0x0002;
 const PAGE_READWRITE: u32 = 0x04;
 
 pub const MAP_FAILED: *mut c_void = null_mut::<c_void>();
 pub const INVALID_HANDLE_VALUE: RawHandle = (-1isize) as RawHandle;
 pub const ERROR_INVALID_PARAMETER: i32 = 87;
 
-/// Helper structure for working with mmaped memory regions in Unix.
+/// Helper structure for working with mmaped memory regions in Windows.
 ///
 /// The structure is used for accessing the guest's physical memory by mmapping it into
 /// the current process.
@@ -119,7 +121,7 @@ unsafe impl<B: Send> Send for MmapRegion<B> {}
 unsafe impl<B: Sync> Sync for MmapRegion<B> {}
 
 impl<B: NewBitmap> MmapRegion<B> {
-    /// Creates a shared anonymous mapping of `size` bytes.
+    /// Creates a private anonymous mapping of `size` bytes.
     ///
     /// # Arguments
     /// * `size` - The size of the memory region in bytes.
@@ -158,10 +160,7 @@ impl<B: NewBitmap> MmapRegion<B> {
         }
 
         let offset = file_offset.start();
-        let end = offset
-            .checked_add(size as u64)
-            .filter(|_| size != 0)
-            .ok_or_else(|| io::Error::from_raw_os_error(ERROR_INVALID_PARAMETER))?;
+        let end = Self::checked_view_end(offset, size)?;
 
         let mapping = unsafe {
             CreateFileMappingA(
@@ -180,26 +179,79 @@ impl<B: NewBitmap> MmapRegion<B> {
         // SAFETY: CreateFileMappingA returned a valid handle that we uniquely own.
         let mapping = unsafe { OwnedHandle::from_raw_handle(mapping) };
 
-        // This is safe because we are creating a mapping in a place not already used by any other
-        // area in this process.
+        // SAFETY: we created an ordinary PAGE_READWRITE data mapping, not an
+        // image or reserved mapping. Its views provide committed read/write pages.
+        unsafe { Self::map_view(mapping.as_handle(), offset, size, Some(file_offset)) }
+    }
+
+    /// Creates an owning read/write view of an existing Windows file-mapping object.
+    ///
+    /// The offset must satisfy the system allocation granularity, and the view
+    /// must fit inside the object. Zero length and offset/size overflow are rejected.
+    /// Windows validates alignment, bounds, and writable access rights.
+    ///
+    /// A successful view retains the mapped object independently of this borrowed
+    /// handle. The caller can close the handle after this function returns.
+    /// The view is released when this region is dropped. No file provenance is
+    /// available through [`Self::file_offset`] for views created this way.
+    ///
+    /// # Safety
+    ///
+    /// The handle must refer to ordinary cacheable data backing, not a `SEC_IMAGE`,
+    /// `SEC_NOCACHE`, or `SEC_WRITECOMBINE` mapping. Every byte of a returned view
+    /// must remain committed, readable, and writable until the region is dropped;
+    /// the caller must not unmap the view or change those memory properties.
+    /// Other host accesses through aliases must follow [`VolatileSlice`]'s access
+    /// discipline. Conflicting host accesses must be synchronized unless both are
+    /// atomic over exactly the same bytes; volatile access alone is not synchronization.
+    /// See the [Rust atomic memory model]. The guest may modify guest memory externally.
+    ///
+    /// [Rust atomic memory model]: https://doc.rust-lang.org/std/sync/atomic/#memory-model-for-atomic-accesses
+    pub unsafe fn from_mapping_handle(
+        mapping: BorrowedHandle<'_>,
+        offset: u64,
+        size: usize,
+    ) -> io::Result<Self> {
+        Self::checked_view_end(offset, size)?;
+        // SAFETY: the caller guarantees the complete returned view's memory properties.
+        unsafe { Self::map_view(mapping, offset, size, None) }
+    }
+
+    fn checked_view_end(offset: u64, size: usize) -> io::Result<u64> {
+        offset
+            .checked_add(size as u64)
+            .filter(|_| size != 0)
+            .ok_or_else(|| io::Error::from_raw_os_error(ERROR_INVALID_PARAMETER))
+    }
+
+    // Callers validate the range and establish the same memory invariants as
+    // from_mapping_handle.
+    unsafe fn map_view(
+        mapping: BorrowedHandle<'_>,
+        offset: u64,
+        size: usize,
+        file_offset: Option<FileOffset>,
+    ) -> io::Result<Self> {
+        // SAFETY: the borrowed handle remains live during MapViewOfFile. Native
+        // success creates a new view reference that remains valid after handle closure.
         let addr = unsafe {
             MapViewOfFile(
                 mapping.as_raw_handle(),
-                FILE_MAP_ALL_ACCESS,
+                FILE_MAP_WRITE,
                 (offset >> 32) as u32,
                 offset as u32,
                 size,
             )
         };
-
         if addr.is_null() {
             return Err(io::Error::last_os_error());
         }
+        // Own native success before bitmap construction can allocate or unwind.
         let allocation = Allocation::MappedView(addr.cast());
         Ok(Self {
             size,
             bitmap: B::with_len(size),
-            file_offset: Some(file_offset),
+            file_offset,
             allocation,
         })
     }
@@ -263,7 +315,8 @@ impl<B: Bitmap> VolatileMemory for MmapRegion<B> {
 
 #[cfg(test)]
 mod tests {
-    use std::os::windows::io::FromRawHandle;
+    use std::os::windows::io::{AsHandle, AsRawHandle, FromRawHandle, OwnedHandle};
+    use std::ptr::null;
     use std::sync::Arc;
 
     use vmm_sys_util::tempfile::TempFile;
@@ -273,6 +326,9 @@ mod tests {
     use crate::bitmap::AtomicBitmap;
     use crate::guest_memory::FileOffset;
     use crate::mmap::windows::{ERROR_INVALID_PARAMETER, INVALID_HANDLE_VALUE};
+    use crate::volatile_memory::VolatileMemory;
+
+    use super::{CreateFileMappingA, PAGE_READWRITE};
 
     type MmapRegion = super::MmapRegion<()>;
 
@@ -327,6 +383,76 @@ mod tests {
         assert_eq!(error.raw_os_error(), Some(1132)); // ERROR_MAPPED_ALIGNMENT
         file.set_len(0)
             .expect("failed view released its section handle");
+    }
+
+    #[test]
+    fn map_section_views() {
+        // SAFETY: create an unnamed, committed, cacheable read/write pagefile section.
+        let raw = unsafe {
+            CreateFileMappingA(
+                INVALID_HANDLE_VALUE,
+                null(),
+                PAGE_READWRITE,
+                0,
+                4096,
+                null(),
+            )
+        };
+        assert!(!raw.is_null(), "{}", std::io::Error::last_os_error());
+        let section = unsafe { OwnedHandle::from_raw_handle(raw) };
+        for (offset, size) in [(0, 0), (u64::MAX, 2)] {
+            // SAFETY: ordinary committed backing; invalid ranges create no view.
+            let error =
+                unsafe { MmapRegion::from_mapping_handle(section.as_handle(), offset, size) }
+                    .unwrap_err();
+            assert_eq!(error.raw_os_error(), Some(ERROR_INVALID_PARAMETER));
+        }
+        // SAFETY: both views retain committed read/write backing and are accessed
+        // only through volatile operations on this thread.
+        let first =
+            unsafe { MmapRegion::from_mapping_handle(section.as_handle(), 0, 4096) }.unwrap();
+        let second =
+            unsafe { MmapRegion::from_mapping_handle(section.as_handle(), 0, 4096) }.unwrap();
+        assert!(first.file_offset().is_none());
+        drop(section);
+        first.get_ref::<u64>(0).unwrap().store(0x1234_5678);
+        assert_eq!(second.get_ref::<u64>(0).unwrap().load(), 0x1234_5678);
+        drop(first);
+        assert_eq!(second.get_ref::<u64>(0).unwrap().load(), 0x1234_5678);
+    }
+
+    #[test]
+    fn map_section_release() {
+        let info = unsafe {
+            let mut info: SYSTEM_INFO = std::mem::zeroed();
+            GetSystemInfo(&mut info);
+            info
+        };
+        let offset = u64::from(info.dwAllocationGranularity);
+        let size = info.dwPageSize as usize;
+        let end = offset + size as u64;
+        let file = TempFile::new().unwrap().into_file();
+        // SAFETY: create an ordinary committed read/write file section.
+        let raw = unsafe {
+            CreateFileMappingA(
+                file.as_raw_handle(),
+                null(),
+                PAGE_READWRITE,
+                (end >> 32) as u32,
+                end as u32,
+                null(),
+            )
+        };
+        assert!(!raw.is_null(), "{}", std::io::Error::last_os_error());
+        let section = unsafe { OwnedHandle::from_raw_handle(raw) };
+        // SAFETY: the file view remains committed and writable, with no concurrent accesses.
+        let region =
+            unsafe { MmapRegion::from_mapping_handle(section.as_handle(), offset, size) }.unwrap();
+        assert!(region.file_offset().is_none());
+        drop(section);
+        assert!(file.set_len(0).is_err());
+        drop(region);
+        file.set_len(0).expect("borrowed section view released");
     }
 
     #[test]
