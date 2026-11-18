@@ -70,10 +70,45 @@ pub const ERROR_INVALID_PARAMETER: i32 = 87;
 /// space size of the process.
 #[derive(Debug)]
 pub struct MmapRegion<B> {
-    addr: *mut u8,
     size: usize,
     bitmap: B,
     file_offset: Option<FileOffset>,
+    allocation: Allocation,
+}
+
+#[derive(Debug)]
+enum Allocation {
+    VirtualAlloc(*mut u8),
+    MappedView(*mut u8),
+}
+
+impl Allocation {
+    fn as_ptr(&self) -> *mut u8 {
+        match self {
+            Self::VirtualAlloc(address) | Self::MappedView(address) => *address,
+        }
+    }
+}
+
+impl Drop for Allocation {
+    fn drop(&mut self) {
+        // SAFETY: this owner contains one successful native allocation and uses
+        // its matching release operation, including on constructor unwinding.
+        let result = unsafe {
+            match self {
+                Self::MappedView(address) => UnmapViewOfFile(address.cast()),
+                // MEM_RELEASE requires size zero for a VirtualAlloc reservation.
+                Self::VirtualAlloc(address) => VirtualFree(address.cast(), 0, MEM_RELEASE),
+            }
+        };
+        if result == 0 {
+            // No logger is available here; preserve the native failure evidence.
+            println!(
+                "WARNING: Could not deallocate mmap allocation {self:?}. Error: {}",
+                unsafe { GetLastError() }
+            );
+        }
+    }
 }
 
 // Send and Sync aren't automatically inherited for the raw address pointer.
@@ -98,11 +133,12 @@ impl<B: NewBitmap> MmapRegion<B> {
         if addr == MAP_FAILED {
             return Err(io::Error::last_os_error());
         }
+        let allocation = Allocation::VirtualAlloc(addr.cast());
         Ok(Self {
-            addr: addr as *mut u8,
             size,
             bitmap: B::with_len(size),
             file_offset: None,
+            allocation,
         })
     }
 
@@ -159,11 +195,12 @@ impl<B: NewBitmap> MmapRegion<B> {
         if addr.is_null() {
             return Err(io::Error::last_os_error());
         }
+        let allocation = Allocation::MappedView(addr.cast());
         Ok(Self {
-            addr: addr as *mut u8,
             size,
             bitmap: B::with_len(size),
             file_offset: Some(file_offset),
+            allocation,
         })
     }
 }
@@ -175,7 +212,7 @@ impl<B: Bitmap> MmapRegion<B> {
     ///
     /// Should only be used for passing this region to ioctls for setting guest memory.
     pub fn as_ptr(&self) -> *mut u8 {
-        self.addr
+        self.allocation.as_ptr()
     }
 
     /// Returns the size of this region.
@@ -215,37 +252,12 @@ impl<B: Bitmap> VolatileMemory for MmapRegion<B> {
         // out volatile accessors.
         Ok(unsafe {
             VolatileSlice::with_bitmap(
-                self.addr.add(offset),
+                self.as_ptr().add(offset),
                 count,
                 self.bitmap.slice_at(offset),
                 None,
             )
         })
-    }
-}
-
-impl<B> Drop for MmapRegion<B> {
-    fn drop(&mut self) {
-        // This is safe because we mmap the area at addr ourselves, and nobody
-        // else is holding a reference to it.
-        unsafe {
-            let ret_val = if self.file_offset.is_some() {
-                UnmapViewOfFile(self.addr.cast())
-            } else {
-                // MEM_RELEASE requires size zero for a VirtualAlloc reservation.
-                VirtualFree(self.addr.cast(), 0, MEM_RELEASE)
-            };
-            if ret_val == 0 {
-                let err = GetLastError();
-                // We can't use any fancy logger here, yet we want to
-                // pin point memory leaks.
-                println!(
-                    "WARNING: Could not deallocate mmap region. \
-                     Address: {:?}. Size: {}. Error: {}",
-                    self.addr, self.size, err
-                )
-            }
-        }
     }
 }
 
