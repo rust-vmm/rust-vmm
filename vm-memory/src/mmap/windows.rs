@@ -5,7 +5,7 @@
 
 use std;
 use std::io;
-use std::os::windows::io::{AsRawHandle, RawHandle};
+use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle, RawHandle};
 use std::ptr::{null, null_mut};
 
 use libc::{c_void, size_t};
@@ -45,7 +45,7 @@ extern "system" {
         dwNumberOfBytesToMap: size_t,
     ) -> *mut c_void;
 
-    pub fn CloseHandle(hObject: RawHandle) -> u32; // BOOL
+    pub fn UnmapViewOfFile(lpBaseAddress: *const c_void) -> u32; // BOOL
 }
 
 const MM_HIGHEST_VAD_ADDRESS: u64 = 0x000007FFFFFDFFFF;
@@ -57,7 +57,6 @@ const PAGE_READWRITE: u32 = 0x04;
 
 pub const MAP_FAILED: *mut c_void = null_mut::<c_void>();
 pub const INVALID_HANDLE_VALUE: RawHandle = (-1isize) as RawHandle;
-#[allow(dead_code)]
 pub const ERROR_INVALID_PARAMETER: i32 = 87;
 
 /// Helper structure for working with mmaped memory regions in Unix.
@@ -113,19 +112,28 @@ impl<B: NewBitmap> MmapRegion<B> {
     /// * `file_offset` - The mapping will be created at offset `file_offset.start` in the file
     ///   referred to by `file_offset.file`.
     /// * `size` - The size of the memory region in bytes.
+    ///
+    /// The offset must be aligned to the system allocation granularity. Windows
+    /// may extend a short file to `offset + size`, even if creating the view fails.
     pub fn from_file(file_offset: FileOffset, size: usize) -> io::Result<Self> {
         let handle = file_offset.file().as_raw_handle();
         if handle == INVALID_HANDLE_VALUE {
             return Err(io::Error::from_raw_os_error(libc::EBADF));
         }
 
+        let offset = file_offset.start();
+        let end = offset
+            .checked_add(size as u64)
+            .filter(|_| size != 0)
+            .ok_or_else(|| io::Error::from_raw_os_error(ERROR_INVALID_PARAMETER))?;
+
         let mapping = unsafe {
             CreateFileMappingA(
                 handle,
                 null(),
                 PAGE_READWRITE,
-                (size >> 32) as u32,
-                size as u32,
+                (end >> 32) as u32,
+                end as u32,
                 null(),
             )
         };
@@ -133,23 +141,20 @@ impl<B: NewBitmap> MmapRegion<B> {
             return Err(io::Error::last_os_error());
         }
 
-        let offset = file_offset.start();
+        // SAFETY: CreateFileMappingA returned a valid handle that we uniquely own.
+        let mapping = unsafe { OwnedHandle::from_raw_handle(mapping) };
 
         // This is safe because we are creating a mapping in a place not already used by any other
         // area in this process.
         let addr = unsafe {
             MapViewOfFile(
-                mapping,
+                mapping.as_raw_handle(),
                 FILE_MAP_ALL_ACCESS,
                 (offset >> 32) as u32,
                 offset as u32,
                 size,
             )
         };
-
-        unsafe {
-            CloseHandle(mapping);
-        }
 
         if addr.is_null() {
             return Err(io::Error::last_os_error());
@@ -223,10 +228,13 @@ impl<B> Drop for MmapRegion<B> {
     fn drop(&mut self) {
         // This is safe because we mmap the area at addr ourselves, and nobody
         // else is holding a reference to it.
-        // Note that the size must be set to 0 when using MEM_RELEASE,
-        // otherwise the function fails.
         unsafe {
-            let ret_val = VirtualFree(self.addr as *mut libc::c_void, 0, MEM_RELEASE);
+            let ret_val = if self.file_offset.is_some() {
+                UnmapViewOfFile(self.addr.cast())
+            } else {
+                // MEM_RELEASE requires size zero for a VirtualAlloc reservation.
+                VirtualFree(self.addr.cast(), 0, MEM_RELEASE)
+            };
             if ret_val == 0 {
                 let err = GetLastError();
                 // We can't use any fancy logger here, yet we want to
@@ -244,11 +252,15 @@ impl<B> Drop for MmapRegion<B> {
 #[cfg(test)]
 mod tests {
     use std::os::windows::io::FromRawHandle;
+    use std::sync::Arc;
+
+    use vmm_sys_util::tempfile::TempFile;
+    use winapi::um::sysinfoapi::{GetSystemInfo, SYSTEM_INFO};
 
     #[cfg(feature = "backend-bitmap")]
     use crate::bitmap::AtomicBitmap;
     use crate::guest_memory::FileOffset;
-    use crate::mmap::windows::INVALID_HANDLE_VALUE;
+    use crate::mmap::windows::{ERROR_INVALID_PARAMETER, INVALID_HANDLE_VALUE};
 
     type MmapRegion = super::MmapRegion<()>;
 
@@ -258,6 +270,51 @@ mod tests {
         let file_offset = FileOffset::new(file, 0);
         let e = MmapRegion::from_file(file_offset, 1024).unwrap_err();
         assert_eq!(e.raw_os_error(), Some(libc::EBADF));
+    }
+
+    #[test]
+    fn map_file_offset() {
+        // SAFETY: GetSystemInfo initializes the supplied SYSTEM_INFO.
+        let info = unsafe {
+            let mut info: SYSTEM_INFO = std::mem::zeroed();
+            GetSystemInfo(&mut info);
+            info
+        };
+        let offset = u64::from(info.dwAllocationGranularity);
+        let size = info.dwPageSize as usize;
+        let file = Arc::new(TempFile::new().unwrap().into_file());
+        file.set_len(offset + size as u64).unwrap();
+        let region =
+            MmapRegion::from_file(FileOffset::from_arc(file.clone(), offset), size).unwrap();
+
+        // Windows refuses truncation while mapped views remain. Check the file
+        // object rather than probing an address another test could have reused.
+        assert!(file.set_len(0).is_err());
+        drop(region);
+        file.set_len(0)
+            .expect("file view and mapping handle released");
+    }
+
+    #[test]
+    fn map_invalid_extents() {
+        let file = Arc::new(TempFile::new().unwrap().into_file());
+        file.set_len(0x10000).unwrap();
+        for (offset, size) in [(0, 0), (u64::MAX, 2)] {
+            let error = MmapRegion::from_file(FileOffset::from_arc(file.clone(), offset), size)
+                .unwrap_err();
+            assert_eq!(error.raw_os_error(), Some(ERROR_INVALID_PARAMETER));
+        }
+        assert_eq!(file.metadata().unwrap().len(), 0x10000);
+    }
+
+    #[test]
+    fn map_failed_view() {
+        let file = Arc::new(TempFile::new().unwrap().into_file());
+        file.set_len(4097).unwrap();
+        let error = MmapRegion::from_file(FileOffset::from_arc(file.clone(), 1), 4096).unwrap_err();
+        assert_eq!(error.raw_os_error(), Some(1132)); // ERROR_MAPPED_ALIGNMENT
+        file.set_len(0)
+            .expect("failed view released its section handle");
     }
 
     #[test]
