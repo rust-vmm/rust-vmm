@@ -1,7 +1,7 @@
 /acpi_tables/ @rbradford @sboeuf
 /event-manager/ @andreeaflorescu @ShadowCurse
 /kvm/ @andreeaflorescu @ShadowCurse
-/linux-loader/ @aghecenco @sameo @rbradford @roypat @andreitraistaru @ShadowCurse
+/linux-loader/ @rbradford @ShadowCurse
 /seccompiler/ @alindima
 /vm-allocator/ @AlexandruCihodaru @studychao @ShadowCurse
 /vm-device/ @rust-vmm/gatekeepers
