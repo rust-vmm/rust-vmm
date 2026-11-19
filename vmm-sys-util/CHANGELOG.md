@@ -4,6 +4,8 @@
 
 ### Added
 
+- [[#198](https://github.com/rust-vmm/rust-vmm/pull/198)]: Added dotted field
+  paths such as `nested.entries` to `generate_fam_struct_impl!`.
 - [[#254](https://github.com/rust-vmm/vmm-sys-util/pull/254)]: Support `TFD_NONBLOCK` for `timerfd::TimerFd`.
 
 ### Changed

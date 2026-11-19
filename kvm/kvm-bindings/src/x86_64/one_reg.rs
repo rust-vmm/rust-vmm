@@ -9,12 +9,12 @@
 
 use super::bindings::{KVM_REG_SIZE_U64, KVM_REG_X86};
 
-/// Register type of a model specific register, indexed by its MSR number.
-pub const KVM_X86_REG_TYPE_MSR: u32 = 2;
-/// Register type of a KVM defined register, indexed from 0.
-pub const KVM_X86_REG_TYPE_KVM: u32 = 3;
 /// The guest's current shadow stack pointer, a `KVM_X86_REG_TYPE_KVM` register.
-pub const KVM_REG_GUEST_SSP: u32 = 0;
+pub use super::bindings::KVM_REG_GUEST_SSP;
+/// Register type of a KVM defined register, indexed from 0.
+pub use super::bindings::KVM_X86_REG_TYPE_KVM;
+/// Register type of a model specific register, indexed by its MSR number.
+pub use super::bindings::KVM_X86_REG_TYPE_MSR;
 
 const fn kvm_x86_reg_id(reg_type: u32, size: u64, index: u32) -> u64 {
     KVM_REG_X86 | ((reg_type as u64) << 32) | size | index as u64

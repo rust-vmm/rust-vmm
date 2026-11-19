@@ -12,7 +12,14 @@ use super::bindings::*;
 const RISCV64_REGS_MAX: usize = 200;
 
 // Implement the FamStruct trait for kvm_reg_list.
-generate_fam_struct_impl!(kvm_reg_list, u64, reg, u64, n, RISCV64_REGS_MAX);
+generate_fam_struct_impl!(
+    kvm_reg_list,
+    u64,
+    __bindgen_anon_1.reg,
+    u64,
+    n,
+    RISCV64_REGS_MAX
+);
 
 // Implement the PartialEq trait for kvm_reg_list.
 impl PartialEq for kvm_reg_list {
@@ -40,7 +47,7 @@ pub const KVM_MAX_IRQ_ROUTES: usize = 4096;
 generate_fam_struct_impl!(
     kvm_irq_routing,
     kvm_irq_routing_entry,
-    entries,
+    __bindgen_anon_1.entries,
     u32,
     nr,
     KVM_MAX_IRQ_ROUTES

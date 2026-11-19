@@ -2,6 +2,38 @@
 
 ## Upcoming Release
 
+### Added
+
+- [[#198]](https://github.com/rust-vmm/rust-vmm/pull/198) Added types and
+  constants from Linux v7.3.1, including x86_64 TDX definitions, new vCPU exit data
+  and the RISC-V CFI/FWFT types.
+- [[#198]](https://github.com/rust-vmm/rust-vmm/pull/198) Added raw bitfield
+  accessors on x86_64.
+- [[#198]](https://github.com/rust-vmm/rust-vmm/pull/198) Added `TdxCapabilities`
+  and `TdxInitVm` FAM wrappers on x86_64.
+
+### Changed
+
+- [[#198]](https://github.com/rust-vmm/rust-vmm/pull/198) Updated bindings to
+  Linux v7.3.1 on all architectures.
+- [[#198]](https://github.com/rust-vmm/rust-vmm/pull/198) Moved several
+  flexible-array fields under `__bindgen_anon_1`, including `kvm_cpuid2.entries`
+  and `kvm_irq_routing.entries`. Update direct accesses, struct literals, field
+  patterns and field offset checks. Existing FAM-wrapper APIs remain unchanged.
+- [[#198]](https://github.com/rust-vmm/rust-vmm/pull/198) Added `gpat` to
+  `kvm_svm_nested_state_hdr`, increasing its size from 8 to 16 bytes.
+- [[#198]](https://github.com/rust-vmm/rust-vmm/pull/198) Added `zicbop_block_size`
+  to `kvm_riscv_config`, increasing its size from 56 to 64 bytes.
+- [[#198]](https://github.com/rust-vmm/rust-vmm/pull/198) Changed RISC-V
+  `KVM_DIRTY_LOG_PAGE_OFFSET` from 0 to 64.
+- [[#198]](https://github.com/rust-vmm/rust-vmm/pull/198) Increased device, SEV
+  and RISC-V extension limit constants.
+
+### Removed
+
+- [[#198]](https://github.com/rust-vmm/rust-vmm/pull/198) Removed the arm64
+  `__uint128_t` alias. Use `__u128` or `u128` instead.
+
 ## v0.14.2
 
 ### Added
