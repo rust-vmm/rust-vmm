@@ -269,6 +269,16 @@ ioctl_iowr_nr!(KVM_GET_NESTED_STATE, KVMIO, 0xbe, kvm_nested_state);
 #[cfg(target_arch = "x86_64")]
 ioctl_iow_nr!(KVM_SET_NESTED_STATE, KVMIO, 0xbf, kvm_nested_state);
 
+// Ioctls for guest_memfd fds.
+
+/* Available with KVM_CAP_GUEST_MEMFD_MEMORY_ATTRIBUTES */
+ioctl_iowr_nr!(
+    KVM_SET_MEMORY_ATTRIBUTES2,
+    KVMIO,
+    0xd2,
+    kvm_memory_attributes2
+);
+
 // Device ioctls.
 
 /* Available with KVM_CAP_DEVICE_CTRL */

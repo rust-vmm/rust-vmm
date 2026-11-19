@@ -738,6 +738,8 @@ pub const KVM_CAP_PRE_FAULT_MEMORY: u32 = 236;
 pub const KVM_CAP_X86_APIC_BUS_CYCLES_NS: u32 = 237;
 pub const KVM_CAP_X86_GUEST_MODE: u32 = 238;
 pub const KVM_CAP_ARM_WRITABLE_IMP_ID_REGS: u32 = 239;
+pub const KVM_CAP_GUEST_MEMFD_FLAGS: u32 = 244;
+pub const KVM_CAP_GUEST_MEMFD_MEMORY_ATTRIBUTES: u32 = 252;
 pub const KVM_IRQ_ROUTING_IRQCHIP: u32 = 1;
 pub const KVM_IRQ_ROUTING_MSI: u32 = 2;
 pub const KVM_IRQ_ROUTING_S390_ADAPTER: u32 = 3;
@@ -813,6 +815,8 @@ pub const KVM_STATS_BASE_MAX: u32 = 256;
 pub const KVM_X86_NOTIFY_VMEXIT_ENABLED: u32 = 1;
 pub const KVM_X86_NOTIFY_VMEXIT_USER: u32 = 2;
 pub const KVM_MEMORY_ATTRIBUTE_PRIVATE: u32 = 8;
+pub const GUEST_MEMFD_FLAG_MMAP: u32 = 1;
+pub const GUEST_MEMFD_FLAG_INIT_SHARED: u32 = 2;
 pub type __s8 = ::std::os::raw::c_schar;
 pub type __u8 = ::std::os::raw::c_uchar;
 pub type __s16 = ::std::os::raw::c_short;
@@ -3856,6 +3860,86 @@ const _: () = {
     ["Offset of field: kvm_memory_attributes::flags"]
         [::std::mem::offset_of!(kvm_memory_attributes, flags) - 24usize];
 };
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct kvm_memory_attributes2 {
+    pub __bindgen_anon_1: kvm_memory_attributes2__bindgen_ty_1,
+    pub size: __u64,
+    pub attributes: __u64,
+    pub flags: __u64,
+    pub error_offset: __u64,
+    pub reserved: [__u64; 11usize],
+}
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub union kvm_memory_attributes2__bindgen_ty_1 {
+    pub address: __u64,
+    pub offset: __u64,
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of kvm_memory_attributes2__bindgen_ty_1"]
+        [::std::mem::size_of::<kvm_memory_attributes2__bindgen_ty_1>() - 8usize];
+    ["Alignment of kvm_memory_attributes2__bindgen_ty_1"]
+        [::std::mem::align_of::<kvm_memory_attributes2__bindgen_ty_1>() - 8usize];
+    ["Offset of field: kvm_memory_attributes2__bindgen_ty_1::address"]
+        [::std::mem::offset_of!(kvm_memory_attributes2__bindgen_ty_1, address) - 0usize];
+    ["Offset of field: kvm_memory_attributes2__bindgen_ty_1::offset"]
+        [::std::mem::offset_of!(kvm_memory_attributes2__bindgen_ty_1, offset) - 0usize];
+};
+impl Default for kvm_memory_attributes2__bindgen_ty_1 {
+    fn default() -> Self {
+        let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::std::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
+impl ::std::fmt::Debug for kvm_memory_attributes2__bindgen_ty_1 {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        write!(f, "kvm_memory_attributes2__bindgen_ty_1 {{ union }}")
+    }
+}
+#[allow(clippy::unnecessary_operation, clippy::identity_op)]
+const _: () = {
+    ["Size of kvm_memory_attributes2"][::std::mem::size_of::<kvm_memory_attributes2>() - 128usize];
+    ["Alignment of kvm_memory_attributes2"]
+        [::std::mem::align_of::<kvm_memory_attributes2>() - 8usize];
+    ["Offset of field: kvm_memory_attributes2::size"]
+        [::std::mem::offset_of!(kvm_memory_attributes2, size) - 8usize];
+    ["Offset of field: kvm_memory_attributes2::attributes"]
+        [::std::mem::offset_of!(kvm_memory_attributes2, attributes) - 16usize];
+    ["Offset of field: kvm_memory_attributes2::flags"]
+        [::std::mem::offset_of!(kvm_memory_attributes2, flags) - 24usize];
+    ["Offset of field: kvm_memory_attributes2::error_offset"]
+        [::std::mem::offset_of!(kvm_memory_attributes2, error_offset) - 32usize];
+    ["Offset of field: kvm_memory_attributes2::reserved"]
+        [::std::mem::offset_of!(kvm_memory_attributes2, reserved) - 40usize];
+};
+impl Default for kvm_memory_attributes2 {
+    fn default() -> Self {
+        let mut s = ::std::mem::MaybeUninit::<Self>::uninit();
+        unsafe {
+            ::std::ptr::write_bytes(s.as_mut_ptr(), 0, 1);
+            s.assume_init()
+        }
+    }
+}
+impl ::std::fmt::Debug for kvm_memory_attributes2 {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        write!(
+            f,
+            "kvm_memory_attributes2 {{ __bindgen_anon_1: {:?}, size: {:?}, attributes: {:?}, flags: {:?}, error_offset: {:?}, reserved: {:?} }}",
+            self.__bindgen_anon_1,
+            self.size,
+            self.attributes,
+            self.flags,
+            self.error_offset,
+            self.reserved
+        )
+    }
+}
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub struct kvm_create_guest_memfd {

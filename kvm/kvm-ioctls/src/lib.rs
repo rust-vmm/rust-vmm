@@ -241,6 +241,7 @@ pub use ioctls::vcpu::{HypercallExit, VcpuExit, VcpuFd};
 #[cfg(target_arch = "x86_64")]
 pub use ioctls::vcpu::{KvmNestedStateBuffer, MsrExitReason, ReadMsrExit, SyncReg, WriteMsrExit};
 
+pub use ioctls::vm::set_guest_memfd_memory_attributes;
 pub use ioctls::vm::{IoEventAddress, NoDatamatch, VmFd};
 #[cfg(target_arch = "x86_64")]
 pub use ioctls::vm::{MsrFilterDefaultAction, MsrFilterRange, MsrFilterRangeFlags};
