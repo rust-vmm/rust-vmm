@@ -8,6 +8,19 @@
 - Crate is now using edition 2021.
 
 ### Fixed
+
+- [[#196]](https://github.com/rust-vmm/vm-allocator/pull/196):
+  `AllocPolicy::ExactMatch` allowed allocating ranges inside already allocated
+  ranges, which could lead to the same range being allocated twice. Requesting
+  exactly an allocated range now returns `Error::ResourceNotAvailable` instead
+  of `Error::InvalidStateTransition`.
+- [[#196]](https://github.com/rust-vmm/vm-allocator/pull/196):
+  `AllocPolicy::ExactMatch` rejected allocations starting at the last address
+  of a free range.
+- [[#196]](https://github.com/rust-vmm/vm-allocator/pull/196): Freed ranges
+  were not merged with free neighbors of length 1, and freeing a range starting
+  at address 1 returned `Error::Underflow` and lost the range.
+
 ### Removed
 ### Deprecated
 
