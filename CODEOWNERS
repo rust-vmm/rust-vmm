@@ -3,7 +3,7 @@
 /kvm/ @acatangiu @aghecenco @andreeaflorescu @lauralt @sameo @roypat @ShadowCurse
 /linux-loader/ @aghecenco @sameo @rbradford @roypat @andreitraistaru @ShadowCurse
 /seccompiler/ @alindima @petreeftime
-/vm-allocator/ @AlexandruCihodaru @alsrdn @jiangliu @andreeaflorescu @gsserge @studychao @roypat @ShadowCurse
+/vm-allocator/ @AlexandruCihodaru @studychao @ShadowCurse
 /vm-device/ @rust-vmm/gatekeepers
 /vmm-sys-util/ @andreeaflorescu @ShadowCurse
 /vm-memory/ @bonzini @ShadowCurse @XanClic
