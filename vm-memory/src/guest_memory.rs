@@ -684,11 +684,18 @@ impl<T: GuestMemory + ?Sized> Bytes<GuestAddress> for T {
     where
         F: ReadVolatile,
     {
-        self.get_slices(addr, count, Permissions::Write)?
+        let mut completed = 0;
+        for slice in self
+            .get_slices(addr, count, Permissions::Write)?
             .stop_on_error()?
-            .try_fold(0, |acc, slice| {
-                Ok(acc + slice.read_volatile_from(0, src, slice.len())?)
-            })
+        {
+            let read = slice.read_volatile_from(0, src, slice.len())?;
+            completed += read;
+            if read < slice.len() {
+                break;
+            }
+        }
+        Ok(completed)
     }
 
     fn read_exact_volatile_from<F>(
@@ -700,11 +707,25 @@ impl<T: GuestMemory + ?Sized> Bytes<GuestAddress> for T {
     where
         F: ReadVolatile,
     {
-        let res = self.read_volatile_from(addr, src, count)?;
-        if res != count {
+        let mut completed = 0;
+        'slices: for slice in self
+            .get_slices(addr, count, Permissions::Write)?
+            .stop_on_error()?
+        {
+            let mut offset = 0;
+            while offset < slice.len() {
+                let read = slice.read_volatile_from(offset, src, slice.len() - offset)?;
+                if read == 0 {
+                    break 'slices;
+                }
+                offset += read;
+                completed += read;
+            }
+        }
+        if completed != count {
             return Err(Error::PartialBuffer {
                 expected: count,
-                completed: res,
+                completed,
             });
         }
         Ok(())
@@ -972,6 +993,152 @@ mod tests {
             mem.read_volatile_from(offset, &mut image.as_slice(), count)
                 .unwrap()
         );
+    }
+
+    #[cfg(feature = "backend-mmap")]
+    struct ShortReader {
+        data: Vec<u8>,
+        offset: usize,
+    }
+
+    #[cfg(feature = "backend-mmap")]
+    impl ReadVolatile for ShortReader {
+        fn read_volatile<B: BitmapSlice>(
+            &mut self,
+            buf: &mut VolatileSlice<B>,
+        ) -> std::result::Result<usize, volatile_memory::Error> {
+            let count = buf
+                .len()
+                .min(self.data.len().saturating_sub(self.offset))
+                .min(1);
+            if count == 0 {
+                return Ok(0);
+            }
+
+            buf.subslice(0, count)
+                .unwrap()
+                .copy_from(&self.data[self.offset..self.offset + count]);
+            self.offset += count;
+            Ok(count)
+        }
+    }
+
+    #[cfg(feature = "backend-mmap")]
+    #[test]
+    fn test_read_volatile_from_stops_on_short_read() {
+        let data = b"short reads";
+        let addr = GuestAddress(0x1000);
+
+        for (ranges, expected_count) in [
+            (vec![(addr, data.len())], 1),
+            (vec![(addr, 4), (addr.unchecked_add(4), data.len() - 4)], 1),
+            (
+                vec![
+                    (addr, 1),
+                    (addr.unchecked_add(1), 4),
+                    (addr.unchecked_add(5), data.len() - 5),
+                ],
+                2,
+            ),
+        ] {
+            let mem = GuestMemoryMmap::from_ranges(&ranges).unwrap();
+            let mut reader = ShortReader {
+                data: data.to_vec(),
+                offset: 0,
+            };
+
+            assert_eq!(
+                mem.read_volatile_from(addr, &mut reader, data.len())
+                    .unwrap(),
+                expected_count
+            );
+            assert_eq!(reader.offset, expected_count);
+
+            let mut actual = vec![0; data.len()];
+            mem.read_slice(&mut actual, addr).unwrap();
+            let mut expected = vec![0; data.len()];
+            expected[..expected_count].copy_from_slice(&data[..expected_count]);
+            assert_eq!(actual, expected);
+
+            let mut completed = expected_count;
+            while completed < data.len() {
+                let read = mem
+                    .read_volatile_from(
+                        addr.unchecked_add(completed as u64),
+                        &mut reader,
+                        data.len() - completed,
+                    )
+                    .unwrap();
+                assert!(read > 0);
+                completed += read;
+            }
+            mem.read_slice(&mut actual, addr).unwrap();
+            assert_eq!(actual, data);
+        }
+    }
+
+    #[cfg(feature = "backend-mmap")]
+    #[test]
+    fn test_read_exact_volatile_from_retries_short_reads() {
+        let data = b"short reads are retried".to_vec();
+        let addr = GuestAddress(0x1000);
+        let mem = GuestMemoryMmap::from_ranges(&[(addr, data.len())]).unwrap();
+        let mut reader = ShortReader {
+            data: data.clone(),
+            offset: 0,
+        };
+
+        mem.read_exact_volatile_from(addr, &mut reader, data.len())
+            .unwrap();
+
+        let mut actual = vec![0; data.len()];
+        mem.read_slice(&mut actual, addr).unwrap();
+        assert_eq!(actual, data);
+    }
+
+    #[cfg(feature = "backend-mmap")]
+    #[test]
+    fn test_read_exact_volatile_from_retries_short_reads_across_regions() {
+        let data = b"short reads are retried";
+        let split = data.len() / 2;
+        let addr = GuestAddress(0x1000);
+        let mem = GuestMemoryMmap::from_ranges(&[
+            (addr, split),
+            (addr.unchecked_add(split as u64), data.len() - split),
+        ])
+        .unwrap();
+        let mut reader = ShortReader {
+            data: data.to_vec(),
+            offset: 0,
+        };
+
+        mem.read_exact_volatile_from(addr, &mut reader, data.len())
+            .unwrap();
+
+        let mut actual = vec![0; data.len()];
+        mem.read_slice(&mut actual, addr).unwrap();
+        assert_eq!(actual, data);
+    }
+
+    #[cfg(feature = "backend-mmap")]
+    #[test]
+    fn test_read_exact_volatile_from_reports_partial_buffer() {
+        let addr = GuestAddress(0x1000);
+        let mem = GuestMemoryMmap::from_ranges(&[(addr, 4), (addr.unchecked_add(4), 4)]).unwrap();
+        let mut src = io::Cursor::new(*b"abcdef");
+        let mut actual = [0; 8];
+        mem.write_slice(b"????????", addr).unwrap();
+
+        matches::assert_matches!(
+            mem.read_exact_volatile_from(addr, &mut src, actual.len())
+                .unwrap_err(),
+            Error::PartialBuffer {
+                expected: 8,
+                completed: 6
+            }
+        );
+        mem.read_slice(&mut actual, addr).unwrap();
+        assert_eq!(&actual, b"abcdef??");
     }
 
     // Runs the provided closure in a loop, until at least `duration` time units have elapsed.

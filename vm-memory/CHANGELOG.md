@@ -8,6 +8,13 @@
   guest-memory reads, writes, and range checks that fit within a single memory
   region.
 
+### Fixed
+
+- \[[#191](https://github.com/rust-vmm/rust-vmm/pull/191)\] Fix
+  `GuestMemory::read_exact_volatile_from` to retry short reads within each guest
+  memory region, and `GuestMemory::read_volatile_from` to stop after a short read
+  without skipping unwritten bytes between regions.
+
 ## 0.18.0
 
 ### Changed
