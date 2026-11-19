@@ -8,6 +8,12 @@
   guest-memory reads, writes, and range checks that fit within a single memory
   region.
 
+### Fixed
+
+- \[[#205](https://github.com/rust-vmm/rust-vmm/pull/205)\] Stop `Iotlb` from
+  panicking (debug) or silently returning a bogus empty translation (release)
+  when an IOVA range's end would overflow `u64`.
+
 ## 0.18.0
 
 ### Changed

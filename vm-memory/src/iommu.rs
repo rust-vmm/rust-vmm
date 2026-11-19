@@ -254,14 +254,25 @@ impl Iotlb {
         //   our entry count.
 
         let mapping = IommuMapping::new(iova.0, map_to.0, perm);
-        self.tlb.insert(iova.0..(iova.0 + length as u64), mapping);
+        // Clamp the end to the representable address space.  `iova.0 + length` can overflow when
+        // the caller (ultimately the vhost-user front-end) passes an IOVA range that reaches past
+        // the end of the 64-bit address space, which would panic in debug builds and wrap into an
+        // inverted (empty) range in release builds.  Mappings are kept as end-exclusive u64 ranges,
+        // so nothing can be mapped beyond u64::MAX anyway; caching the representable head still maps
+        // every representable address to exactly the target the caller requested.
+        let end = iova.0.saturating_add(length as u64);
+        self.tlb.insert(iova.0..end, mapping);
 
         Ok(())
     }
 
     /// Remove any mapping in the given IOVA range.
     pub fn invalidate_mapping(&mut self, iova: GuestAddress, length: usize) {
-        self.tlb.remove(iova.0..(iova.0 + length as u64));
+        // Clamp the end to the representable address space; see `set_mapping()` for why `iova.0 +
+        // length` must not be computed directly.  Removing the representable head is correct because
+        // no mapping can exist beyond u64::MAX.
+        let end = iova.0.saturating_add(length as u64);
+        self.tlb.remove(iova.0..end);
     }
 
     /// Remove all mappings.
@@ -281,7 +292,18 @@ impl Iotlb {
         length: usize,
         access: Permissions,
     ) -> Result<IotlbIterator<D>, IotlbFails> {
-        let full_range = iova.0..(iova.0 + length as u64);
+        // An IOVA range whose end would exceed the 64-bit address space cannot be fully backed by
+        // any mapping (mappings are kept as end-exclusive u64 ranges), and `iova.0 + length` would
+        // otherwise overflow: that panics in debug builds, and in release builds wraps into an
+        // inverted, empty range that makes the lookup report a bogus successful translation of zero
+        // bytes.  Fail closed instead by reporting the whole requested range as unmapped.
+        let Some(iova_end) = iova.0.checked_add(length as u64) else {
+            return Err(IotlbFails {
+                misses: vec![IovaRange { base: iova, length }],
+                access_fails: Vec::new(),
+            });
+        };
+        let full_range = iova.0..iova_end;
 
         let has_misses = this.tlb.gaps(&full_range).any(|_| true);
         let has_access_fails = this
@@ -1089,6 +1111,65 @@ mod tests {
                 base: IOVA,
                 length: LEN,
             }],
+            [],
+        );
+
+        Ok(())
+    }
+
+    /// An IOVA range whose end would exceed the 64-bit address space must not make the IOTLB panic
+    /// (debug builds) or silently wrap into an empty range (release builds).  Looking such a range
+    /// up fails closed, while mapping/invalidating it operates on the representable head.
+    #[test]
+    fn test_iotlb_iova_overflow() -> Result<(), Error> {
+        // A lookup whose end overflows u64 must be reported as a full miss, not a bogus empty hit.
+        let iotlb = Iotlb::new();
+        verify_fail(
+            &iotlb,
+            GuestAddress(u64::MAX - 1),
+            16,
+            Permissions::Read,
+            [IovaRange {
+                base: GuestAddress(u64::MAX - 1),
+                length: 16,
+            }],
+            [],
+        );
+
+        // Mapping an overflowing range caches its representable head ([base, u64::MAX)) without
+        // panicking, and maps every representable address to the requested target.
+        let mut iotlb = Iotlb::new();
+        let base = GuestAddress(u64::MAX - 3);
+        let phys = GuestAddress(0x1000);
+        iotlb.set_mapping(base, phys, 16, Permissions::ReadWrite)?;
+        verify_hit(
+            &iotlb,
+            base,
+            3,
+            Permissions::ReadWrite,
+            [MappedRange {
+                base: phys,
+                length: 3,
+            }],
+        );
+        // The part at/after u64::MAX is not representable, so the full overflowing range still fails.
+        verify_fail(
+            &iotlb,
+            base,
+            16,
+            Permissions::ReadWrite,
+            [IovaRange { base, length: 16 }],
+            [],
+        );
+
+        // Invalidating an overflowing range clears the representable head without panicking.
+        iotlb.invalidate_mapping(base, 16);
+        verify_fail(
+            &iotlb,
+            base,
+            3,
+            Permissions::ReadWrite,
+            [IovaRange { base, length: 3 }],
             [],
         );
 
