@@ -1,4 +1,4 @@
-/acpi_tables/ @jiangliu @liuw @rbradford @sboeuf
+/acpi_tables/ @rbradford @sboeuf
 /event-manager/ @andreeaflorescu @ShadowCurse
 /kvm/ @andreeaflorescu @ShadowCurse
 /linux-loader/ @aghecenco @sameo @rbradford @roypat @andreitraistaru @ShadowCurse
