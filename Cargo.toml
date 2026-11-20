@@ -6,6 +6,7 @@ members = [
   "acpi_tables",
   "event-manager",
   "kvm/kvm-bindings",
+  "kvm/kvm-bindings/gen",
   "kvm/kvm-ioctls",
   "linux-loader",
   "seccompiler",

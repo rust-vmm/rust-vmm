@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #[allow(clippy::undocumented_unsafe_blocks)]
 #[allow(clippy::all)]
+#[allow(unsafe_op_in_unsafe_fn)]
 pub mod bindings;
 #[cfg(feature = "fam-wrappers")]
 pub mod fam_wrappers;
