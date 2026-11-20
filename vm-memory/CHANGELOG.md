@@ -2,6 +2,12 @@
 
 ## Upcoming Release
 
+### Fixed
+
+- \[[#207](https://github.com/rust-vmm/rust-vmm/pull/207)\] Correct Windows file
+  mapping extents at nonzero offsets, reject zero-length file mappings, and
+  release file views with `UnmapViewOfFile`.
+
 ### Changed
 
 - \[[#132](https://github.com/rust-vmm/rust-vmm/pull/132)\] Add fast paths for
