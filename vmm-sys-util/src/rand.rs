@@ -11,10 +11,14 @@
 use std::ffi::OsString;
 use std::str;
 
-/// Gets an ever increasing u64 (at least for this process).
+/// Gets a u64 that never decreases (at least for this process).
 ///
 /// The number retrieved will be based upon the time of the last reboot (x86_64)
 /// and something undefined for other architectures.
+///
+/// On architectures other than x86_64 the value comes from `CLOCK_MONOTONIC`,
+/// which can return the same value for calls made in quick succession, so two
+/// consecutive calls are not guaranteed to return different values.
 pub fn timestamp_cycles() -> u64 {
     #[cfg(target_arch = "x86_64")]
     // SAFETY: Safe because there's nothing that can go wrong with this call.
@@ -108,17 +112,40 @@ pub fn rand_bytes(len: usize) -> Vec<u8> {
 mod tests {
     use super::*;
 
+    // Calls `f` until it returns something other than `first`, failing the
+    // test if that does not happen within a second. Back-to-back reads of
+    // `CLOCK_MONOTONIC` can return the same value (see clock_gettime(2)), so
+    // the tests below only require the value to change eventually.
+    fn wait_for_change<T: PartialEq + std::fmt::Debug>(first: T, f: impl Fn() -> T) -> T {
+        let start = std::time::Instant::now();
+        loop {
+            let next = f();
+            if next != first {
+                return next;
+            }
+            assert!(
+                start.elapsed() < std::time::Duration::from_secs(1),
+                "value stayed at {first:?} for a second"
+            );
+        }
+    }
+
     #[test]
     fn test_timestamp_cycles() {
         for _ in 0..1000 {
-            assert!(timestamp_cycles() < timestamp_cycles());
+            let a = timestamp_cycles();
+            let b = timestamp_cycles();
+            assert!(a <= b, "{a} > {b}");
         }
+        let a = timestamp_cycles();
+        let b = wait_for_change(a, timestamp_cycles);
+        assert!(a < b, "{a} >= {b}");
     }
 
     #[test]
     fn test_xor_pseudo_rng_u32() {
         for _ in 0..1000 {
-            assert_ne!(xor_pseudo_rng_u32(), xor_pseudo_rng_u32());
+            wait_for_change(xor_pseudo_rng_u32(), xor_pseudo_rng_u32);
         }
     }
 
