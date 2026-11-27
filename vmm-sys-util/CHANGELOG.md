@@ -17,6 +17,12 @@
   the ioctl numbers can be imported in const context (e.g. alongside
   seccompiler) without redefining them.
 
+### Fixed
+
+- [[#189](https://github.com/rust-vmm/rust-vmm/issues/189)]: `rand::timestamp_cycles`
+  is now strictly increasing on non-x86_64 targets, where `CLOCK_MONOTONIC` can
+  return the same value twice.
+
 ## v0.15.0
 
 ### Added
